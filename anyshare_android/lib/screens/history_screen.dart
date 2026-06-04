@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/daily_usage.dart';
 import '../services/usage_history_service.dart';
-import '../widgets/action_button.dart';
 import '../widgets/usage_row.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -28,48 +27,76 @@ class _HistoryScreenState extends State<HistoryScreen> {
     });
   }
 
-  Future<void> _addSample() async {
-    final data = await _service.addTodaySample(
-      downloadMB: 12.5,
-      uploadMB: 3.2,
-    );
+  Future<void> _reset() async {
+    await _service.resetHistory();
 
     setState(() {
-      history = data;
+      history = [];
     });
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Usage history reset')),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final total = history.fold<double>(
+      0,
+      (sum, item) => sum + item.totalMB,
+    );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('7-Day Usage History'),
         backgroundColor: const Color(0xFF0A0A0C),
+        actions: [
+          IconButton(
+            onPressed: _reset,
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Reset history',
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            ActionButton(
-              title: 'Add Test Usage Sample',
-              onPressed: _addSample,
-            ),
-            Expanded(
-              child: history.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No usage history yet',
-                        style: TextStyle(color: Color(0xFF6B7280)),
-                      ),
-                    )
-                  : ListView(
-                      children: history
-                          .map((item) => UsageRow(item: item))
-                          .toList(),
+        child: history.isEmpty
+            ? const Center(
+                child: Text(
+                  'No usage history yet',
+                  style: TextStyle(color: Color(0xFF6B7280)),
+                ),
+              )
+            : Column(
+                children: [
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF111115),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF1E1E24)),
                     ),
-            ),
-          ],
-        ),
+                    child: Text(
+                      'Last 7 days total: ${total.toStringAsFixed(2)} MB',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView(
+                      children:
+                          history.map((item) => UsageRow(item: item)).toList(),
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }

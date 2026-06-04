@@ -15,12 +15,15 @@ class UsageRow extends StatelessWidget {
         color: const Color(0xFF111115),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(item.date),
+          Text(item.date, style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          Text('WiFi: ${item.wifiMB.toStringAsFixed(2)} MB'),
+          Text('Cellular: ${item.cellularMB.toStringAsFixed(2)} MB'),
           Text(
-            '${item.totalMB.toStringAsFixed(2)} MB',
+            'Total: ${item.totalMB.toStringAsFixed(2)} MB',
             style: const TextStyle(
               color: Color(0xFF3A86FF),
               fontWeight: FontWeight.bold,
