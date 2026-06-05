@@ -29,10 +29,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<void> _reset() async {
     await _service.resetHistory();
-
-    setState(() {
-      history = [];
-    });
+    await _load();
 
     if (!mounted) return;
 

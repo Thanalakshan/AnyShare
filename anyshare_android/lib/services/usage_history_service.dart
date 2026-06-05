@@ -17,6 +17,20 @@ class UsageHistoryService {
 
   Future<void> resetHistory() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_key);
+
+    final today = DateTime.now().toIso8601String().split('T').first;
+
+    final resetData = [
+      DailyUsage(
+        date: today,
+        wifiMB: 0,
+        cellularMB: 0,
+        downloadMB: 0,
+        uploadMB: 0,
+        totalMB: 0,
+      ).toJson(),
+    ];
+
+    await prefs.setString(_key, jsonEncode(resetData));
   }
 }

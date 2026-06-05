@@ -65,72 +65,88 @@ class NetworkSpeedService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun getStatusBarTextColor(): Int {
+        // Try to get the text color from the app theme
+        val typedValue = android.util.TypedValue()
+        val context = applicationContext
+        
+        // First, try to resolve textColorPrimary from the theme
+        if (context.theme.resolveAttribute(android.R.attr.textColorPrimary, typedValue, true)) {
+            return typedValue.data
+        }
+        
+        // Fallback: Check system appearance for API 29+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val uiMode = resources.configuration.uiMode
+                val isDarkMode = (uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == 
+                    android.content.res.Configuration.UI_MODE_NIGHT_YES
+                
+                // In dark mode, status bar text is typically light/white
+                // In light mode, status bar text is typically dark
+                return if (isDarkMode) Color.WHITE else Color.BLACK
+            } catch (e: Exception) {
+                // Fallback to white
+                return Color.WHITE
+            }
+        }
+        
+        // For older APIs, default to white
+        return Color.WHITE
+    }
+
     private fun createSpeedIcon(speedText: String): IconCompat {
+        // Switch back to ARGB_8888 so we can draw exact colors manually
         val bitmap = Bitmap.createBitmap(192, 192, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
 
         canvas.drawColor(Color.TRANSPARENT)
 
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        paint.color = Color.WHITE
+        
+        // Dynamically adapt to status bar color by checking system appearance
+        paint.color = getStatusBarTextColor()
+        
         paint.textAlign = Paint.Align.CENTER
         paint.typeface = Typeface.DEFAULT_BOLD
 
         var valueText = "0"
-        var unitText = "KB/s"
+        var unitText = "KB"
 
         try {
             when {
                 speedText.contains("MB/s") -> {
-                    val value = speedText
-                        .replace("MB/s", "")
-                        .trim()
-                        .toDouble()
-
+                    val value = speedText.replace("MB/s", "").trim().toDouble()
                     valueText = String.format("%.1f", value)
-                    unitText = "MB/s"
+                    unitText = "MB"
                 }
 
                 speedText.contains("KB/s") -> {
-                    val value = speedText
-                        .replace("KB/s", "")
-                        .trim()
-                        .toDouble()
-
+                    val value = speedText.replace("KB/s", "").trim().toDouble()
                     valueText = value.roundToInt().toString()
-                    unitText = "KB/s"
+                    unitText = "KB"
                 }
 
                 speedText.contains("B/s") -> {
-                    val value = speedText
-                        .replace("B/s", "")
-                        .trim()
-                        .toDouble()
-
+                    val value = speedText.replace("B/s", "").trim().toDouble()
                     valueText = value.roundToInt().toString()
-                    unitText = "B/s"
+                    unitText = "B"
                 }
             }
-        } catch (_: Exception) {
+        } catch (_: Exception) {}
+
+        val numberTextSize = when {
+            valueText.length >= 4 -> 95f
+            valueText.length == 3 -> 110f
+            else -> 140f
         }
 
-        // Main speed value
-        paint.textSize = 84f
-        canvas.drawText(
-            valueText,
-            96f,
-            85f,
-            paint
-        )
+        paint.style = Paint.Style.FILL
+        paint.textSize = numberTextSize
+        canvas.drawText(valueText, 96f, 120f, paint)
 
-        // Unit
-        paint.textSize = 36f
-        canvas.drawText(
-            unitText,
-            96f,
-            135f,
-            paint
-        )
+        paint.textSize = 70f
+        canvas.drawText(unitText, 96f, 190f, paint)
 
         return IconCompat.createWithBitmap(bitmap)
     }
