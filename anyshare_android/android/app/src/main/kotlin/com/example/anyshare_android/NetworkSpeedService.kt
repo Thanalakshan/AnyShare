@@ -3,16 +3,16 @@ package com.example.anyshare_android
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.graphics.*
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.TrafficStats
 import android.os.*
 import androidx.core.app.NotificationCompat
+import androidx.core.graphics.drawable.IconCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.max
-import android.graphics.*
-import androidx.core.graphics.drawable.IconCompat
 import kotlin.math.roundToInt
 
 class NetworkSpeedService : Service() {
@@ -36,7 +36,12 @@ class NetworkSpeedService : Service() {
         }
     }
 
+    companion object {
+        var isRunning: Boolean = false
+    }
+
     override fun onCreate() {
+        isRunning = true
         super.onCreate()
 
         createChannel()
@@ -46,9 +51,13 @@ class NetworkSpeedService : Service() {
         lastTx = TrafficStats.getTotalTxBytes()
         lastTime = System.currentTimeMillis()
 
+        val initialMain = "Down: 0 B/s     Up: 0 B/s"
+        val initialSecond =
+            "Mobile: ${formatBytes(todayCellularBytes)}     WiFi: ${formatBytes(todayWifiBytes)}"
+
         val initialNotification = buildNotification(
-            "↓ 0 B/s   ↑ 0 B/s",
-            "WiFi: ${formatBytes(todayWifiBytes)}   Mobile: ${formatBytes(todayCellularBytes)}",
+            initialMain,
+            initialSecond,
             "0 KB/s"
         )
 
@@ -58,6 +67,7 @@ class NetworkSpeedService : Service() {
     }
 
     override fun onDestroy() {
+        isRunning = false
         handler.removeCallbacks(updater)
         saveUsage()
         super.onDestroy()
@@ -65,88 +75,72 @@ class NetworkSpeedService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private fun getStatusBarTextColor(): Int {
-        // Try to get the text color from the app theme
-        val typedValue = android.util.TypedValue()
-        val context = applicationContext
-        
-        // First, try to resolve textColorPrimary from the theme
-        if (context.theme.resolveAttribute(android.R.attr.textColorPrimary, typedValue, true)) {
-            return typedValue.data
-        }
-        
-        // Fallback: Check system appearance for API 29+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            try {
-                val uiMode = resources.configuration.uiMode
-                val isDarkMode = (uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == 
-                    android.content.res.Configuration.UI_MODE_NIGHT_YES
-                
-                // In dark mode, status bar text is typically light/white
-                // In light mode, status bar text is typically dark
-                return if (isDarkMode) Color.WHITE else Color.BLACK
-            } catch (e: Exception) {
-                // Fallback to white
-                return Color.WHITE
-            }
-        }
-        
-        // For older APIs, default to white
-        return Color.WHITE
-    }
-
     private fun createSpeedIcon(speedText: String): IconCompat {
-        // Switch back to ARGB_8888 so we can draw exact colors manually
-        val bitmap = Bitmap.createBitmap(192, 192, Bitmap.Config.ARGB_8888)
+        val width = 160
+        val height = 160
+
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ALPHA_8)
         val canvas = Canvas(bitmap)
 
-        canvas.drawColor(Color.TRANSPARENT)
+        canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
 
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-        
-        // Dynamically adapt to status bar color by checking system appearance
-        paint.color = getStatusBarTextColor()
-        
+        paint.color = Color.WHITE
+        paint.alpha = 255
         paint.textAlign = Paint.Align.CENTER
         paint.typeface = Typeface.DEFAULT_BOLD
+        paint.style = Paint.Style.FILL
+        paint.clearShadowLayer()
 
         var valueText = "0"
-        var unitText = "KB"
+        var unitText = "KB/s"
 
         try {
             when {
                 speedText.contains("MB/s") -> {
                     val value = speedText.replace("MB/s", "").trim().toDouble()
                     valueText = String.format("%.1f", value)
-                    unitText = "MB"
+                    unitText = "MB/s"
                 }
 
                 speedText.contains("KB/s") -> {
                     val value = speedText.replace("KB/s", "").trim().toDouble()
                     valueText = value.roundToInt().toString()
-                    unitText = "KB"
+                    unitText = "KB/s"
                 }
 
                 speedText.contains("B/s") -> {
                     val value = speedText.replace("B/s", "").trim().toDouble()
                     valueText = value.roundToInt().toString()
-                    unitText = "B"
+                    unitText = "B/s"
                 }
             }
-        } catch (_: Exception) {}
-
-        val numberTextSize = when {
-            valueText.length >= 4 -> 95f
-            valueText.length == 3 -> 110f
-            else -> 140f
+        } catch (_: Exception) {
         }
 
-        paint.style = Paint.Style.FILL
-        paint.textSize = numberTextSize
-        canvas.drawText(valueText, 96f, 120f, paint)
+        var numberTextSize = 118f
 
-        paint.textSize = 70f
-        canvas.drawText(unitText, 96f, 190f, paint)
+        paint.textSize = numberTextSize
+        paint.letterSpacing = -0.16f
+
+        val maxNumberWidth = width * 0.92f
+        val numberWidth = paint.measureText(valueText)
+
+        if (numberWidth > maxNumberWidth) {
+            val scale = maxNumberWidth / numberWidth
+            numberTextSize *= scale
+        }
+
+        val centerX = width / 2f
+
+        paint.textSize = numberTextSize
+        paint.textScaleX = 0.85f
+        paint.letterSpacing = -0.10f
+        canvas.drawText(valueText, centerX, 95f, paint)
+
+        paint.textSize = numberTextSize * 0.62f
+        paint.letterSpacing = -0.08f
+        canvas.drawText(unitText, centerX, 158f, paint)
 
         return IconCompat.createWithBitmap(bitmap)
     }
@@ -172,6 +166,7 @@ class NetworkSpeedService : Service() {
 
         val downSpeed = diffRx / diffTime
         val upSpeed = diffTx / diffTime
+        val totalSpeed = downSpeed + upSpeed
 
         lastRx = nowRx
         lastTx = nowTx
@@ -180,36 +175,51 @@ class NetworkSpeedService : Service() {
         saveUsage()
         saveSevenDayHistory(diffRx, diffTx, networkType)
 
-        val title = "↓ ${formatSpeed(downSpeed)}   ↑ ${formatSpeed(upSpeed)}"
-        val text = "WiFi: ${formatBytes(todayWifiBytes)}   Mobile: ${formatBytes(todayCellularBytes)}"
+        val mainLine =
+            "Down: ${formatSpeed(downSpeed)}     Up: ${formatSpeed(upSpeed)}"
+        val secondLine =
+            "Mobile: ${formatBytes(todayCellularBytes)}     WiFi: ${formatBytes(todayWifiBytes)}"
 
         val manager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        val totalSpeedText = formatSpeed(downSpeed + upSpeed)
 
         val notification = buildNotification(
-            title,
-            text,
-            totalSpeedText
+            mainLine,
+            secondLine,
+            formatSpeed(totalSpeed)
         )
 
         manager.notify(notificationId, notification)
     }
 
     private fun buildNotification(
-        title: String,
-        text: String,
+        mainLine: String,
+        secondLine: String,
         totalSpeedText: String
     ): Notification {
+        val openAppIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         return NotificationCompat.Builder(this, channelId)
             .setSmallIcon(createSpeedIcon(totalSpeedText))
-            .setContentTitle(title)
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText("$title\n$text"))
+            .setContentTitle(mainLine)
+            .setContentText(secondLine)
+            .setStyle(NotificationCompat.BigTextStyle().bigText("$mainLine\n$secondLine"))
+            .setContentIntent(pendingIntent)
+            .setColor(Color.parseColor("#2196F3"))
+            .setColorized(false)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
             .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
     }
 
@@ -229,8 +239,10 @@ class NetworkSpeedService : Service() {
         return when {
             bytesPerSecond >= 1024 * 1024 ->
                 String.format("%.2f MB/s", bytesPerSecond / 1024 / 1024)
+
             bytesPerSecond >= 1024 ->
                 String.format("%.1f KB/s", bytesPerSecond / 1024)
+
             else ->
                 String.format("%.0f B/s", bytesPerSecond)
         }
@@ -240,10 +252,13 @@ class NetworkSpeedService : Service() {
         return when {
             bytes >= 1024L * 1024L * 1024L ->
                 String.format("%.2f GB", bytes / 1024.0 / 1024.0 / 1024.0)
+
             bytes >= 1024L * 1024L ->
                 String.format("%.2f MB", bytes / 1024.0 / 1024.0)
+
             bytes >= 1024L ->
                 String.format("%.1f KB", bytes / 1024.0)
+
             else -> "$bytes B"
         }
     }
@@ -255,6 +270,7 @@ class NetworkSpeedService : Service() {
 
     private fun resetIfNewDay() {
         val nowDate = today()
+
         if (currentDate != nowDate) {
             currentDate = nowDate
             todayWifiBytes = 0L
@@ -265,9 +281,11 @@ class NetworkSpeedService : Service() {
 
     private fun loadUsage() {
         val prefs = getSharedPreferences("anyshare_speed", Context.MODE_PRIVATE)
+
         currentDate = prefs.getString("date", today()) ?: today()
         todayWifiBytes = prefs.getLong("wifi", 0L)
         todayCellularBytes = prefs.getLong("cellular", 0L)
+
         resetIfNewDay()
     }
 
@@ -280,7 +298,11 @@ class NetworkSpeedService : Service() {
             .apply()
     }
 
-    private fun saveSevenDayHistory(downloadBytes: Long, uploadBytes: Long, networkType: String) {
+    private fun saveSevenDayHistory(
+        downloadBytes: Long,
+        uploadBytes: Long,
+        networkType: String
+    ) {
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
         val key = "flutter.anyshare_usage_history"
 
@@ -292,6 +314,7 @@ class NetworkSpeedService : Service() {
 
         for (i in 0 until array.length()) {
             val item = array.getJSONObject(i)
+
             if (item.getString("date") == todayDate) {
                 foundIndex = i
                 break
@@ -317,12 +340,14 @@ class NetworkSpeedService : Service() {
             array.put(foundIndex, item)
         } else {
             val item = JSONObject()
+
             item.put("date", todayDate)
             item.put("wifiMB", wifiAdd)
             item.put("cellularMB", cellularAdd)
             item.put("downloadMB", downloadMB)
             item.put("uploadMB", uploadMB)
             item.put("totalMB", totalMB)
+
             array.put(item)
         }
 
@@ -340,6 +365,7 @@ class NetworkSpeedService : Service() {
                 "AnyShare Network Speed",
                 NotificationManager.IMPORTANCE_LOW
             )
+
             channel.setShowBadge(false)
 
             val manager = getSystemService(NotificationManager::class.java)

@@ -29,9 +29,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final savedSpeed = await _settingsService.getSpeedEnabled();
-    final savedClipboard = await _settingsService.getClipboardEnabled();
-    final savedNetwork = await _settingsService.getNetworkEnabled();
+    final serviceRunning = await _speedService.isNotificationRunning();
+    final savedSpeed = serviceRunning;
+    await _settingsService.setSpeedEnabled(serviceRunning);
+    final savedClipboard = false;
+    final savedNetwork = false;
+
+    await _settingsService.setClipboardEnabled(false);
+    await _settingsService.setNetworkEnabled(false);
 
     if (!mounted) return;
 
@@ -102,22 +107,29 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111115),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF1E1E24)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(title,
-              style:
-                  const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-          Switch(value: value, onChanged: onChanged),
-        ],
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onChanged(!value),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111115),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF1E1E24)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(title,
+                style:
+                    const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+            ),
+          ],
+        ),
       ),
     );
   }

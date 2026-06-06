@@ -35,6 +35,10 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
 
+                    "isSpeedServiceRunning" -> {
+                        result.success(NetworkSpeedService.isRunning)
+                    }
+
                     else -> result.notImplemented()
                 }
             }

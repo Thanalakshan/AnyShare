@@ -11,4 +11,9 @@ class NetworkSpeedService {
   Future<void> stopNotification() async {
     await _channel.invokeMethod('stopSpeedNotification');
   }
+
+  Future<bool> isNotificationRunning() async {
+    final result = await _channel.invokeMethod<bool>('isSpeedServiceRunning');
+    return result ?? false;
+  }
 }
