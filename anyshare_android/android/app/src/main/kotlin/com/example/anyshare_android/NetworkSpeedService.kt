@@ -118,7 +118,10 @@ class NetworkSpeedService : Service() {
         } catch (_: Exception) {
         }
 
-        var numberTextSize = 118f
+        var numberTextSize = when {
+            valueText.length >= 3 -> 96f
+            else -> 108f
+        }
 
         paint.textSize = numberTextSize
         paint.letterSpacing = -0.16f
@@ -138,8 +141,8 @@ class NetworkSpeedService : Service() {
         paint.letterSpacing = -0.10f
         canvas.drawText(valueText, centerX, 95f, paint)
 
-        paint.textSize = numberTextSize * 0.62f
-        paint.letterSpacing = -0.08f
+        paint.textSize = numberTextSize * 0.78f
+        paint.letterSpacing = -0.06f
         canvas.drawText(unitText, centerX, 158f, paint)
 
         return IconCompat.createWithBitmap(bitmap)
@@ -211,7 +214,7 @@ class NetworkSpeedService : Service() {
             .setSmallIcon(createSpeedIcon(totalSpeedText))
             .setContentTitle(mainLine)
             .setContentText(secondLine)
-            .setStyle(NotificationCompat.BigTextStyle().bigText("$mainLine\n$secondLine"))
+
             .setContentIntent(pendingIntent)
             .setColor(Color.parseColor("#2196F3"))
             .setColorized(false)
