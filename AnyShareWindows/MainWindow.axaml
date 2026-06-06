@@ -1,0 +1,53 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="AnyShareWindows.MainWindow"
+        Width="380"
+        Height="430"
+        Title="AnyShare"
+        Background="#0A0A0C">
+
+    <StackPanel Margin="22" Spacing="16">
+
+        <TextBlock Text="AnyShare"
+                   FontSize="32"
+                   FontWeight="Bold"
+                   Foreground="White"/>
+
+        <Border Classes="card">
+            <DockPanel>
+                <TextBlock Text="Network Speed Monitor" Foreground="White" FontWeight="Bold"/>
+                <ToggleSwitch x:Name="SpeedToggle" DockPanel.Dock="Right"/>
+            </DockPanel>
+        </Border>
+
+        <Border Classes="card">
+            <DockPanel>
+                <TextBlock Text="Network Sharing" Foreground="White" FontWeight="Bold"/>
+                <ToggleSwitch x:Name="SharingToggle" DockPanel.Dock="Right"/>
+            </DockPanel>
+        </Border>
+
+        <Border Classes="card">
+            <DockPanel>
+                <TextBlock Text="Clipboard Sharing" Foreground="White" FontWeight="Bold"/>
+                <ToggleSwitch x:Name="ClipboardToggle" DockPanel.Dock="Right"/>
+            </DockPanel>
+        </Border>
+
+        <Border Classes="card">
+            <DockPanel>
+                <TextBlock Text="Open at Startup" Foreground="White" FontWeight="Bold"/>
+                <ToggleSwitch x:Name="StartupToggle" DockPanel.Dock="Right"/>
+            </DockPanel>
+        </Border>
+
+        <Border Classes="card">
+            <StackPanel>
+                <TextBlock Text="Today" Foreground="White" FontWeight="Bold"/>
+                <TextBlock x:Name="SpeedText" Text="Speed: 0 KB/s" Foreground="#9CA3AF"/>
+                <TextBlock x:Name="UsageText" Text="Usage: 0 MB" Foreground="#9CA3AF"/>
+            </StackPanel>
+        </Border>
+
+    </StackPanel>
+</Window>

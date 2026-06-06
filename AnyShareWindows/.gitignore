@@ -1,0 +1,71 @@
+# Build output
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+*.userprefs
+
+# Visual Studio
+.vs/
+
+# VS Code
+.vscode/
+
+# Rider
+.idea/
+
+# Avalonia generated files
+*.g.cs
+*.g.i.cs
+
+# NuGet
+packages/
+*.nupkg
+
+# Publish output
+publish/
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+
+# Test results
+TestResults/
+
+# Coverage
+coverage/
+coverage-report/
+
+# Windows installer outputs
+*.msi
+*.exe
+
+# Electron leftovers (if migrating from Electron)
+node_modules/
+dist/
+package-lock.json
+
+# Local settings
+appsettings.Development.json
+
+# JetBrains Rider cache
+_ReSharper*/
+*.DotSettings.user
+
+# Avalonia diagnostics
+avalonia-logs/
+
+# ADB local binaries (if you bundle them later)
+adb.exe
+AdbWinApi.dll
+AdbWinUsbApi.dll
