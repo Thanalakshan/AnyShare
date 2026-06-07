@@ -99,7 +99,12 @@ class NetworkSpeedService : Service() {
             when {
                 speedText.contains("MB/s") -> {
                     val value = speedText.replace("MB/s", "").trim().toDouble()
-                    valueText = String.format("%.1f", value)
+
+                    valueText = when {
+                        value >= 9.95 -> value.roundToInt().toString()
+                        else -> String.format("%.1f", value)
+                    }
+
                     unitText = "MB/s"
                 }
 
@@ -118,10 +123,7 @@ class NetworkSpeedService : Service() {
         } catch (_: Exception) {
         }
 
-        var numberTextSize = when {
-            valueText.length >= 3 -> 96f
-            else -> 108f
-        }
+        var numberTextSize = 100f
 
         paint.textSize = numberTextSize
         paint.letterSpacing = -0.16f
