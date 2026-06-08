@@ -8,7 +8,6 @@ namespace AnyShareWindows;
 
 public partial class MainWindow : Window
 {
-    private readonly NetworkSpeedService _networkSpeed = new();
     private readonly AdbService _adb = new();
     private readonly StartupService _startup = new();
     private readonly SettingsService _settings = new();
@@ -16,86 +15,92 @@ public partial class MainWindow : Window
 
     private readonly DispatcherTimer _timer = new();
     private bool _historyExpanded = false;
+    private bool _isUpdatingToggle = false;
 
     public MainWindow()
     {
         InitializeComponent();
 
-        // Load saved settings
         LoadSettings();
 
-        // Speed toggle - click card to toggle
-        SpeedCard.Click += (_, _) => { SpeedToggle.IsChecked = !SpeedToggle.IsChecked; };
-        SpeedToggle.IsCheckedChanged += (_, _) => 
-        { 
+        SpeedCard.Click += (_, _) =>
+        {
+            SpeedToggle.IsChecked = !(SpeedToggle.IsChecked ?? false);
+        };
+
+        SpeedToggle.IsCheckedChanged += (_, _) =>
+        {
+            if (_isUpdatingToggle) return;
+
             SpeedDetailsPanel.IsVisible = SpeedToggle.IsChecked ?? false;
-            SaveSettings();
-            if (SpeedToggle.IsChecked == false)
+
+            if (SpeedToggle.IsChecked == true)
             {
+                App.SpeedWidget?.Show();
+            }
+            else
+            {
+                App.SpeedWidget?.Hide();
                 _historyExpanded = false;
                 HistoryPanel.IsVisible = false;
                 HistoryArrow.Text = "▼";
             }
+
+            SaveSettings();
         };
 
-        // Reset button
-        ResetButton.Click += (_, _) => 
+        ResetButton.Click += (_, _) =>
         {
-            _networkSpeed.ResetTodayUsage();
+            App.NetworkSpeed.ResetTodayUsage();
             _usageHistory.ResetToday();
+
+            DownloadUsageText.Text = "0 MB";
+            UploadUsageText.Text = "0 MB";
             TodayUsageText.Text = "0 MB";
+            UpdateHistoryDisplay();
         };
 
-        // History toggle
         HistoryToggleButton.Click += (_, _) => ToggleHistory();
 
-        // Sharing toggle - click card to toggle
-        SharingCard.Click += async (_, _) => 
-        { 
-            if (SharingToggle.IsChecked != true)
-            {
-                SharingToggle.IsChecked = !SharingToggle.IsChecked;
-            }
-            else
-            {
-                SharingToggle.IsChecked = false;
-                await OnNetworkSharingChanged();
-            }
+        SharingCard.Click += (_, _) =>
+        {
+            SharingToggle.IsChecked = !(SharingToggle.IsChecked ?? false);
         };
-        SharingToggle.IsCheckedChanged += async (_, _) => 
-        { 
-            SaveSettings();
+
+        SharingToggle.IsCheckedChanged += async (_, _) =>
+        {
+            if (_isUpdatingToggle) return;
+
             await OnNetworkSharingChanged();
-        };
-
-        // Clipboard toggle - click card to toggle
-        ClipboardCard.Click += async (_, _) => 
-        { 
-            if (ClipboardToggle.IsChecked != true)
-            {
-                ClipboardToggle.IsChecked = !ClipboardToggle.IsChecked;
-            }
-            else
-            {
-                ClipboardToggle.IsChecked = false;
-                await OnClipboardChanged();
-            }
-        };
-        ClipboardToggle.IsCheckedChanged += async (_, _) => 
-        { 
             SaveSettings();
-            await OnClipboardChanged();
         };
 
-        // Startup toggle - click card to toggle
-        StartupCard.Click += (_, _) => { StartupToggle.IsChecked = !StartupToggle.IsChecked; };
+        ClipboardCard.Click += (_, _) =>
+        {
+            ClipboardToggle.IsChecked = !(ClipboardToggle.IsChecked ?? false);
+        };
+
+        ClipboardToggle.IsCheckedChanged += async (_, _) =>
+        {
+            if (_isUpdatingToggle) return;
+
+            await OnClipboardChanged();
+            SaveSettings();
+        };
+
+        StartupCard.Click += (_, _) =>
+        {
+            StartupToggle.IsChecked = !(StartupToggle.IsChecked ?? false);
+        };
+
         StartupToggle.IsCheckedChanged += (_, _) =>
         {
+            if (_isUpdatingToggle) return;
+
             _startup.SetStartup(StartupToggle.IsChecked == true);
             SaveSettings();
         };
 
-        // Save settings before closing
         Closing += (_, _) => SaveSettings();
 
         _timer.Interval = TimeSpan.FromSeconds(1);
@@ -103,33 +108,57 @@ public partial class MainWindow : Window
         {
             if (SpeedToggle.IsChecked == true)
             {
-                var speed = _networkSpeed.GetCurrentSpeed();
-                DownloadSpeedText.Text = _networkSpeed.GetCurrentDownloadSpeed();
-                UploadSpeedText.Text = _networkSpeed.GetCurrentUploadSpeed();
-                TodayUsageText.Text = _networkSpeed.GetTodayUsage();
-                NetworkSourceText.Text = _networkSpeed.NetworkSource;
+                var downloadSpeed = App.NetworkSpeed.GetCurrentDownloadSpeed();
+                var uploadSpeed = App.NetworkSpeed.GetCurrentUploadSpeed();
 
-                // Update history service
-                _usageHistory.UpdateTodayUsage(_networkSpeed.CurrentDownloadSpeed + _networkSpeed.CurrentUploadSpeed, _networkSpeed.NetworkSource);
+                DownloadSpeedText.Text = downloadSpeed;
+                UploadSpeedText.Text = uploadSpeed;
+                DownloadUsageText.Text = App.NetworkSpeed.GetTodayDownloadUsage();
+                UploadUsageText.Text = App.NetworkSpeed.GetTodayUploadUsage();
+                TodayUsageText.Text = App.NetworkSpeed.GetTodayUsage();
+                NetworkSourceText.Text = App.NetworkSpeed.NetworkSource;
+
+                App.SpeedWidget?.UpdateSpeed(uploadSpeed, downloadSpeed);
+
+                _usageHistory.UpdateTodayUsage(
+                    App.NetworkSpeed.CurrentDownloadSpeed + App.NetworkSpeed.CurrentUploadSpeed,
+                    App.NetworkSpeed.NetworkSource
+                );
+
+                if (_historyExpanded)
+                {
+                    UpdateHistoryDisplay();
+                }
             }
         };
-        _timer.Start();
 
-        // Generate history UI
+        _timer.Start();
         UpdateHistoryDisplay();
     }
 
     private void LoadSettings()
     {
         var settings = _settings.LoadSettings();
-        
+
+        _isUpdatingToggle = true;
+
         SpeedToggle.IsChecked = settings.NetworkSpeedMonitor;
         SharingToggle.IsChecked = settings.NetworkSharing;
         ClipboardToggle.IsChecked = settings.ClipboardSharing;
         StartupToggle.IsChecked = settings.OpenAtStartup;
 
-        // Show speed details if enabled
         SpeedDetailsPanel.IsVisible = settings.NetworkSpeedMonitor;
+
+        if (settings.NetworkSpeedMonitor)
+        {
+            App.SpeedWidget?.Show();
+        }
+        else
+        {
+            App.SpeedWidget?.Hide();
+        }
+
+        _isUpdatingToggle = false;
     }
 
     private void SaveSettings()
@@ -152,6 +181,11 @@ public partial class MainWindow : Window
         _historyExpanded = !_historyExpanded;
         HistoryPanel.IsVisible = _historyExpanded;
         HistoryArrow.Text = _historyExpanded ? "▲" : "▼";
+
+        if (_historyExpanded)
+        {
+            UpdateHistoryDisplay();
+        }
     }
 
     private void UpdateHistoryDisplay()
@@ -162,13 +196,15 @@ public partial class MainWindow : Window
 
         if (history.Count == 0)
         {
-            var emptyText = new TextBlock
+            HistoryItemsPanel.Children.Add(new TextBlock
             {
                 Text = "No history yet",
-                Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#6B7280")),
+                Foreground = new Avalonia.Media.SolidColorBrush(
+                    Avalonia.Media.Color.Parse("#6B7280")
+                ),
                 FontSize = 12
-            };
-            HistoryItemsPanel.Children.Add(emptyText);
+            });
+
             return;
         }
 
@@ -185,7 +221,9 @@ public partial class MainWindow : Window
             var dateText = new TextBlock
             {
                 Text = $"{record.Date:MMM dd, yyyy}",
-                Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#6B7280")),
+                Foreground = new Avalonia.Media.SolidColorBrush(
+                    Avalonia.Media.Color.Parse("#6B7280")
+                ),
                 FontSize = 11
             };
 
@@ -198,7 +236,9 @@ public partial class MainWindow : Window
             var usageText = new TextBlock
             {
                 Text = NetworkSpeedService.FormatBytes(record.BytesUsed),
-                Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("White")),
+                Foreground = new Avalonia.Media.SolidColorBrush(
+                    Avalonia.Media.Color.Parse("White")
+                ),
                 FontWeight = Avalonia.Media.FontWeight.Bold,
                 FontSize = 11
             };
@@ -206,7 +246,9 @@ public partial class MainWindow : Window
             var sourceText = new TextBlock
             {
                 Text = $"({record.NetworkSource})",
-                Foreground = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#3A86FF")),
+                Foreground = new Avalonia.Media.SolidColorBrush(
+                    Avalonia.Media.Color.Parse("#3A86FF")
+                ),
                 FontSize = 10
             };
 
@@ -227,7 +269,9 @@ public partial class MainWindow : Window
         {
             if (!await _adb.IsDeviceConnected())
             {
+                _isUpdatingToggle = true;
                 SharingToggle.IsChecked = false;
+                _isUpdatingToggle = false;
                 return;
             }
 
@@ -241,7 +285,9 @@ public partial class MainWindow : Window
         {
             if (!await _adb.IsDeviceConnected())
             {
+                _isUpdatingToggle = true;
                 ClipboardToggle.IsChecked = false;
+                _isUpdatingToggle = false;
                 return;
             }
 
@@ -251,6 +297,5 @@ public partial class MainWindow : Window
 
     public void UpdateTrayIcon(string uploadSpeed, string downloadSpeed)
     {
-        // This will be called from App.cs to update tray tooltip
     }
 }

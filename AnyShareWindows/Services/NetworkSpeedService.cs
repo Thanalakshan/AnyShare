@@ -14,26 +14,37 @@ public class NetworkSpeedService
     public long CurrentDownloadSpeed { get; private set; }
     public long CurrentUploadSpeed { get; private set; }
     public string NetworkSource { get; private set; } = "Unknown";
+    public long TodayDownloadBytes { get; private set; }
+    public long TodayUploadBytes { get; private set; }
 
     public string GetCurrentSpeed()
     {
         var interfaces = NetworkInterface.GetAllNetworkInterfaces()
             .Where(n =>
                 n.OperationalStatus == OperationalStatus.Up &&
-                n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                n.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                n.NetworkInterfaceType != NetworkInterfaceType.Tunnel &&
+                n.GetIPv4Statistics().BytesReceived > 0)
             .ToList();
 
         long received = 0;
         long sent = 0;
+        NetworkSource = "Not connected";
 
-        // Detect network source and calculate speeds
         foreach (var item in interfaces)
         {
             var stats = item.GetIPv4Statistics();
+
             received += stats.BytesReceived;
             sent += stats.BytesSent;
 
-            // Detect network type
+            var properties = item.GetIPProperties();
+            var hasGateway = properties.GatewayAddresses.Any(g =>
+                g.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+
+            if (!hasGateway)
+                continue;
+
             if (item.NetworkInterfaceType == NetworkInterfaceType.Wireless80211)
                 NetworkSource = "WiFi";
             else if (item.NetworkInterfaceType == NetworkInterfaceType.Ethernet)
@@ -41,15 +52,17 @@ public class NetworkSpeedService
         }
 
         var now = DateTime.Now;
-        var seconds = Math.Max((now - _lastTime).TotalSeconds, 1);
+        var seconds = Math.Max((now - _lastTime).TotalSeconds, 0.001);
 
         var diffReceived = Math.Max(received - _lastReceived, 0);
         var diffSent = Math.Max(sent - _lastSent, 0);
-        var diff = diffReceived + diffSent;
+        var diffTotal = diffReceived + diffSent;
 
-        TodayBytes += diff;
+        TodayDownloadBytes += diffReceived;
+        TodayUploadBytes += diffSent;
+        TodayBytes = TodayDownloadBytes + TodayUploadBytes;
 
-        // Store individual speeds
+        // Windows NetworkInterface gives BYTES, not bits.
         CurrentDownloadSpeed = (long)(diffReceived / seconds);
         CurrentUploadSpeed = (long)(diffSent / seconds);
 
@@ -57,7 +70,17 @@ public class NetworkSpeedService
         _lastSent = sent;
         _lastTime = now;
 
-        return FormatSpeed(diff / seconds);
+        return FormatSpeed(CurrentDownloadSpeed + CurrentUploadSpeed);
+    }
+
+    public string GetTodayDownloadUsage()
+    {
+        return FormatBytes(TodayDownloadBytes);
+    }
+
+    public string GetTodayUploadUsage()
+    {
+        return FormatBytes(TodayUploadBytes);
     }
 
     public string GetCurrentDownloadSpeed()
@@ -77,25 +100,44 @@ public class NetworkSpeedService
 
     public static string FormatSpeed(double bytesPerSecond)
     {
-        if (bytesPerSecond >= 1024 * 1024)
-            return $"{bytesPerSecond / 1024 / 1024:0.0} MB/s";
+        const double KB = 1024.0;
+        const double MB = KB * 1024.0;
+        const double GB = MB * 1024.0;
 
-        if (bytesPerSecond >= 1024)
-            return $"{bytesPerSecond / 1024:0} KB/s";
+        if (bytesPerSecond >= GB)
+        {
+            return $"{bytesPerSecond / GB:0.0} GB/s";
+        }
 
-        return $"{bytesPerSecond:0} B/s";
+        if (bytesPerSecond >= MB)
+        {
+            var mb = bytesPerSecond / MB;
+
+            if (mb >= 10)
+                return $"{Math.Round(mb):0} MB/s";
+
+            return $"{mb:0.0} MB/s";
+        }
+
+        var kb = bytesPerSecond / KB;
+
+        return $"{Math.Round(kb):0} KB/s";
     }
 
     public static string FormatBytes(long bytes)
     {
-        if (bytes >= 1024L * 1024L * 1024L)
-            return $"{bytes / 1024.0 / 1024.0 / 1024.0:0.00} GB";
+        const double KB = 1024.0;
+        const double MB = KB * 1024.0;
+        const double GB = MB * 1024.0;
 
-        if (bytes >= 1024L * 1024L)
-            return $"{bytes / 1024.0 / 1024.0:0.00} MB";
+        if (bytes >= GB)
+            return $"{bytes / GB:0.00} GB";
 
-        if (bytes >= 1024L)
-            return $"{bytes / 1024.0:0.0} KB";
+        if (bytes >= MB)
+            return $"{bytes / MB:0.00} MB";
+
+        if (bytes >= KB)
+            return $"{bytes / KB:0.0} KB";
 
         return $"{bytes} B";
     }
@@ -103,5 +145,18 @@ public class NetworkSpeedService
     public void ResetTodayUsage()
     {
         TodayBytes = 0;
+        TodayDownloadBytes = 0;
+        TodayUploadBytes = 0;
+
+        var interfaces = NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n =>
+                n.OperationalStatus == OperationalStatus.Up &&
+                n.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                n.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
+            .ToList();
+
+        _lastReceived = interfaces.Sum(i => i.GetIPv4Statistics().BytesReceived);
+        _lastSent = interfaces.Sum(i => i.GetIPv4Statistics().BytesSent);
+        _lastTime = DateTime.Now;
     }
 }

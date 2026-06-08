@@ -1,0 +1,58 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="AnyShareWindows.TaskbarWidgetWindow"
+        Width="150"
+        Height="38"
+        CanResize="False"
+        ShowInTaskbar="False"
+        WindowDecorations="None"
+        Background="Transparent">
+
+    <Border Background="Transparent"
+            BorderBrush="Transparent"
+            BorderThickness="0"
+            Padding="4,1">
+
+        <Grid RowDefinitions="*,*"
+              ColumnDefinitions="Auto,Auto,*">
+
+            <TextBlock Grid.Row="0" Grid.Column="0"
+                       Text="↑ Up"
+                       Foreground="White"
+                       FontSize="12"
+                       FontWeight="Normal"/>
+
+            <TextBlock Grid.Row="0" Grid.Column="1"
+                       Text=" : "
+                       Foreground="White"
+                       FontSize="12"
+                       FontWeight="Normal"/>
+
+            <TextBlock x:Name="UploadText"
+                       Grid.Row="0" Grid.Column="2"
+                       Text="0 KB/s"
+                       Foreground="White"
+                       FontSize="12"
+                       FontWeight="Normal"/>
+
+            <TextBlock Grid.Row="1" Grid.Column="0"
+                       Text="↓ Down"
+                       Foreground="White"
+                       FontSize="12"
+                       FontWeight="Normal"/>
+
+            <TextBlock Grid.Row="1" Grid.Column="1"
+                       Text=" : "
+                       Foreground="White"
+                       FontSize="12"
+                       FontWeight="Normal"/>
+
+            <TextBlock x:Name="DownloadText"
+                       Grid.Row="1" Grid.Column="2"
+                       Text="0 KB/s"
+                       Foreground="White"
+                       FontSize="12"
+                       FontWeight="Normal"/>
+        </Grid>
+    </Border>
+</Window>

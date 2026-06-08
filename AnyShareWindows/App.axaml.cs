@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using AnyShareWindows.Services;
 
@@ -13,9 +14,12 @@ public partial class App : Application
     private MainWindow? _mainWindow;
     private TrayIcon? _trayIcon;
     private bool _allowExit = false;
+
     private SettingsService? _settings;
-    private NetworkSpeedService? _networkSpeed;
     private DispatcherTimer? _trayUpdateTimer;
+
+    public static NetworkSpeedService NetworkSpeed { get; private set; } = new();
+    public static TaskbarWidgetWindow? SpeedWidget { get; private set; }
 
     public override void Initialize()
     {
@@ -29,7 +33,7 @@ public partial class App : Application
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
             _settings = new SettingsService();
-            _networkSpeed = new NetworkSpeedService();
+
             _mainWindow = new MainWindow();
             desktop.MainWindow = _mainWindow;
 
@@ -42,17 +46,21 @@ public partial class App : Application
                 }
             };
 
-            // Save settings before app actually exits
-            desktop.ShutdownRequested += (_, _) =>
-            {
-                _trayUpdateTimer?.Stop();
-                _trayIcon?.Dispose();
-            };
-
             CreateTrayIcon();
+
+            SpeedWidget = new TaskbarWidgetWindow();
+            SpeedWidget.Hide();
+
             StartTrayUpdateTimer();
 
             _mainWindow.Hide();
+
+            desktop.ShutdownRequested += (_, _) =>
+            {
+                _trayUpdateTimer?.Stop();
+                SpeedWidget?.Close();
+                _trayIcon?.Dispose();
+            };
         }
 
         base.OnFrameworkInitializationCompleted();
@@ -76,7 +84,10 @@ public partial class App : Application
         {
             ToolTipText = "AnyShare",
             Menu = menu,
-            IsVisible = true
+            IsVisible = true,
+            Icon = new WindowIcon(
+                AssetLoader.Open(new Uri("avares://AnyShareWindows/Assets/icon/icon.ico"))
+            )
         };
 
         _trayIcon.Clicked += (_, _) => OpenWindow();
@@ -91,18 +102,34 @@ public partial class App : Application
 
         _trayUpdateTimer.Tick += (_, _) =>
         {
-            if (_networkSpeed != null && _trayIcon != null)
+            if (_trayIcon == null || _settings == null)
+                return;
+
+            var settings = _settings.LoadSettings();
+
+            if (settings.NetworkSpeedMonitor)
             {
-                var settings = _settings?.LoadSettings();
-                if (settings?.NetworkSpeedMonitor == true)
+                NetworkSpeed.GetCurrentSpeed();
+
+                var download = NetworkSpeed.GetCurrentDownloadSpeed();
+                var upload = NetworkSpeed.GetCurrentUploadSpeed();
+
+                _trayIcon.ToolTipText = $"AnyShare\n↓ {download}\n↑ {upload}";
+
+                SpeedWidget?.UpdateSpeed(upload, download);
+
+                if (SpeedWidget?.IsVisible == false)
                 {
-                    var download = _networkSpeed.GetCurrentDownloadSpeed();
-                    var upload = _networkSpeed.GetCurrentUploadSpeed();
-                    _trayIcon.ToolTipText = $"AnyShare\n↓ {download} | ↑ {upload}";
+                    SpeedWidget.Show();
                 }
-                else
+            }
+            else
+            {
+                _trayIcon.ToolTipText = "AnyShare";
+
+                if (SpeedWidget?.IsVisible == true)
                 {
-                    _trayIcon.ToolTipText = "AnyShare";
+                    SpeedWidget.Hide();
                 }
             }
         };
@@ -112,10 +139,7 @@ public partial class App : Application
 
     private void OpenWindow()
     {
-        if (_mainWindow == null)
-        {
-            _mainWindow = new MainWindow();
-        }
+        _mainWindow ??= new MainWindow();
 
         _mainWindow.Show();
         _mainWindow.WindowState = WindowState.Normal;
@@ -125,7 +149,9 @@ public partial class App : Application
     private void ExitApp()
     {
         _allowExit = true;
+
         _trayUpdateTimer?.Stop();
+        SpeedWidget?.Close();
         _trayIcon?.Dispose();
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
