@@ -13,22 +13,37 @@
             <Setter Property="CornerRadius" Value="14"/>
             <Setter Property="Padding" Value="16"/>
         </Style>
-    </Application.Styles>
 
-    <TrayIcon.Icons>
-        <TrayIcons>
-            <TrayIcon Icon="/Assets/avalonia-logo.ico"
-                      ToolTipText="AnyShare">
-                <TrayIcon.Menu>
-                    <NativeMenu>
-                        <NativeMenuItem Header="Open AnyShare"
-                                        Command="{ReflectionBinding OpenCommand}" />
-                        <NativeMenuItemSeparator />
-                        <NativeMenuItem Header="Exit"
-                                        Command="{ReflectionBinding ExitCommand}" />
-                    </NativeMenu>
-                </TrayIcon.Menu>
-            </TrayIcon>
-        </TrayIcons>
-    </TrayIcon.Icons>
+        <Style Selector="Button.toggleCard">
+            <Setter Property="Background" Value="#111115"/>
+            <Setter Property="BorderBrush" Value="#1E1E24"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="Margin" Value="0,0,0,0"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="15"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+
+        <Style Selector="Button.toggleCard:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#1A1A1F"/>
+        </Style>
+
+        <Style Selector="Button.resetBtn">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="#3A86FF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Foreground" Value="#3A86FF"/>
+            <Setter Property="CornerRadius" Value="6"/>
+            <Setter Property="HorizontalAlignment" Value="Right"/>
+        </Style>
+
+        <Style Selector="Button.resetBtn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3A86FF"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+    </Application.Styles>
 </Application>

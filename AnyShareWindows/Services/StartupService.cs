@@ -7,6 +7,7 @@ public class StartupService
 {
     private const string AppName = "AnyShare";
 
+#pragma warning disable CA1416
     public void SetStartup(bool enabled)
     {
         using var key = Registry.CurrentUser.OpenSubKey(
@@ -24,4 +25,5 @@ public class StartupService
             key.DeleteValue(AppName, false);
         }
     }
+#pragma warning restore CA1416
 }
