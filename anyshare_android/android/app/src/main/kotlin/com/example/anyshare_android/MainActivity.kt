@@ -1,5 +1,8 @@
 package com.example.anyshare_android
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -48,13 +51,43 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "startClipboardBridge" -> {
-                        val intent = Intent(this, ClipboardBridgeService::class.java)
-                        startService(intent)
+                        startService(Intent(this, ClipboardBridgeService::class.java))
                         result.success(true)
                     }
 
                     "stopClipboardBridge" -> {
                         stopService(Intent(this, ClipboardBridgeService::class.java))
+                        result.success(true)
+                    }
+
+                    "sendAndroidClipboard" -> {
+                        val clipboard =
+                            getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+                        val clip = clipboard.primaryClip
+
+                        val text = if (clip != null && clip.itemCount > 0) {
+                            clip.getItemAt(0).coerceToText(this)?.toString() ?: ""
+                        } else {
+                            ""
+                        }
+
+                        ClipboardBridgeService.lastAndroidSent = text
+                        result.success(true)
+                    }
+
+                    "receiveWindowsClipboard" -> {
+                        val text = ClipboardBridgeService.lastWindowsSent
+
+                        if (text.isNotEmpty()) {
+                            val clipboard =
+                                getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+
+                            clipboard.setPrimaryClip(
+                                ClipData.newPlainText("AnyShare", text)
+                            )
+                        }
+
                         result.success(true)
                     }
 

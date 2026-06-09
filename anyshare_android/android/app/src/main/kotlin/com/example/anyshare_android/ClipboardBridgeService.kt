@@ -18,6 +18,11 @@ class ClipboardBridgeService : Service() {
     private var serverSocket: ServerSocket? = null
     private var running = false
 
+    companion object {
+        var lastAndroidSent: String = ""
+        var lastWindowsSent: String = ""
+    }
+
     override fun onCreate() {
         super.onCreate()
         startServer()
@@ -42,8 +47,7 @@ class ClipboardBridgeService : Service() {
                     val client = serverSocket?.accept() ?: continue
                     handleClient(client)
                 }
-            } catch (_: Exception) {
-            }
+            } catch (_: Exception) {}
         }
     }
 
@@ -53,71 +57,48 @@ class ClipboardBridgeService : Service() {
                 val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
                 val requestLine = reader.readLine() ?: ""
 
-                if (requestLine.startsWith("GET /clipboard/pull")) {
-                    val text = getClipboardText()
-                    val encoded = URLEncoder.encode(text, "UTF-8")
-
-                    val body = """{"text":"$encoded"}"""
-
-                    socket.getOutputStream().write(
-                        buildResponse(body).toByteArray()
-                    )
-                } else if (requestLine.startsWith("POST /clipboard/push")) {
-                    var contentLength = 0
-                    var line: String?
-
-                    while (true) {
-                        line = reader.readLine()
-                        if (line.isNullOrEmpty()) break
-
-                        if (line.lowercase().startsWith("content-length:")) {
-                            contentLength = line.substringAfter(":").trim().toIntOrNull() ?: 0
-                        }
+                when {
+                    requestLine.startsWith("GET /clipboard/android/last") -> {
+                        val encoded = URLEncoder.encode(lastAndroidSent, "UTF-8")
+                        socket.getOutputStream().write(
+                            buildResponse("""{"text":"$encoded"}""").toByteArray()
+                        )
                     }
 
-                    val bodyChars = CharArray(contentLength)
-                    reader.read(bodyChars)
-                    val body = String(bodyChars)
+                    requestLine.startsWith("POST /clipboard/windows/send") -> {
+                        val body = readBody(reader)
+                        val encodedText = body.substringAfter("\"text\":\"", "").substringBefore("\"", "")
+                        lastWindowsSent = URLDecoder.decode(encodedText, "UTF-8")
+                        socket.getOutputStream().write(buildResponse("""{"ok":true}""").toByteArray())
+                    }
 
-                    val encodedText = body
-                        .substringAfter("\"text\":\"", "")
-                        .substringBefore("\"", "")
-
-                    val text = URLDecoder.decode(encodedText, "UTF-8")
-                    setClipboardText(text)
-
-                    socket.getOutputStream().write(
-                        buildResponse("""{"ok":true}""").toByteArray()
-                    )
-                } else {
-                    socket.getOutputStream().write(
-                        buildResponse("""{"error":"unknown"}""").toByteArray()
-                    )
+                    else -> {
+                        socket.getOutputStream().write(buildResponse("""{"error":"unknown"}""").toByteArray())
+                    }
                 }
 
                 socket.close()
             } catch (_: Exception) {
-                try {
-                    socket.close()
-                } catch (_: Exception) {
-                }
+                try { socket.close() } catch (_: Exception) {}
             }
         }
     }
 
-    private fun getClipboardText(): String {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = clipboard.primaryClip ?: return ""
+    private fun readBody(reader: BufferedReader): String {
+        var contentLength = 0
 
-        if (clip.itemCount == 0) return ""
+        while (true) {
+            val line = reader.readLine()
+            if (line.isNullOrEmpty()) break
 
-        return clip.getItemAt(0).coerceToText(this)?.toString() ?: ""
-    }
+            if (line.lowercase().startsWith("content-length:")) {
+                contentLength = line.substringAfter(":").trim().toIntOrNull() ?: 0
+            }
+        }
 
-    private fun setClipboardText(text: String) {
-        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("AnyShare Clipboard", text)
-        clipboard.setPrimaryClip(clip)
+        val bodyChars = CharArray(contentLength)
+        reader.read(bodyChars)
+        return String(bodyChars)
     }
 
     private fun buildResponse(body: String): String {

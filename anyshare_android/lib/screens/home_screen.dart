@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+
+import '../services/clipboard_bridge_service.dart';
 import '../services/network_speed_service.dart';
 import '../services/settings_service.dart';
 import '../services/usb_debug_service.dart';
-import 'clipboard_screen.dart';
 import 'history_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -16,6 +17,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final NetworkSpeedService _speedService = NetworkSpeedService();
   final UsbDebugService _usbDebugService = UsbDebugService();
   final SettingsService _settingsService = SettingsService();
+  final ClipboardBridgeService _clipboardBridge = ClipboardBridgeService();
 
   bool speedEnabled = false;
   bool clipboardEnabled = false;
@@ -30,20 +32,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadSettings() async {
     final serviceRunning = await _speedService.isNotificationRunning();
-    final savedSpeed = serviceRunning;
-    await _settingsService.setSpeedEnabled(serviceRunning);
-    final savedClipboard = false;
-    final savedNetwork = false;
 
+    await _settingsService.setSpeedEnabled(serviceRunning);
     await _settingsService.setClipboardEnabled(false);
     await _settingsService.setNetworkEnabled(false);
 
     if (!mounted) return;
 
     setState(() {
-      speedEnabled = savedSpeed;
-      clipboardEnabled = savedClipboard;
-      networkSharingEnabled = savedNetwork;
+      speedEnabled = serviceRunning;
+      clipboardEnabled = false;
+      networkSharingEnabled = false;
       loading = false;
     });
   }
@@ -71,6 +70,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     await _settingsService.setSpeedEnabled(value);
 
+    if (!mounted) return;
+
     setState(() {
       speedEnabled = value;
     });
@@ -80,13 +81,39 @@ class _HomeScreenState extends State<HomeScreen> {
     if (value) {
       final ok = await _checkUsbDebugging();
       if (!ok) return;
+
+      await _clipboardBridge.start();
+    } else {
+      await _clipboardBridge.stop();
     }
 
     await _settingsService.setClipboardEnabled(value);
 
+    if (!mounted) return;
+
     setState(() {
       clipboardEnabled = value;
     });
+  }
+
+  Future<void> _sendClipboardToWindows() async {
+    await _clipboardBridge.sendAndroidClipboard();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Clipboard sent to Windows')),
+    );
+  }
+
+  Future<void> _receiveClipboardFromWindows() async {
+    await _clipboardBridge.receiveWindowsClipboard();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Clipboard received from Windows')),
+    );
   }
 
   Future<void> _toggleNetworkSharing(bool value) async {
@@ -96,6 +123,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     await _settingsService.setNetworkEnabled(value);
+
+    if (!mounted) return;
 
     setState(() {
       networkSharingEnabled = value;
@@ -121,9 +150,13 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(title,
-                style:
-                    const TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             Switch(
               value: value,
               onChanged: onChanged,
@@ -171,8 +204,12 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               const Text(
                 'AnyShare',
-                style: TextStyle(fontSize: 32, fontWeight: FontWeight.w900),
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
+
               const SizedBox(height: 28),
 
               _toggleRow(
@@ -206,18 +243,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 onChanged: _toggleClipboard,
               ),
 
-              if (clipboardEnabled)
+              if (clipboardEnabled) ...[
                 _smallButton(
-                  title: 'Clipboard Management',
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ClipboardScreen(),
-                      ),
-                    );
-                  },
+                  title: 'Send Clipboard to Windows',
+                  onPressed: _sendClipboardToWindows,
                 ),
+                _smallButton(
+                  title: 'Receive Clipboard from Windows',
+                  onPressed: _receiveClipboardFromWindows,
+                ),
+              ],
             ],
           ),
         ),
