@@ -10,15 +10,33 @@ public class NetworkSpeedService
     private long _lastSent;
     private DateTime _lastTime = DateTime.Now;
 
+    private bool _externalMode = false;
+
     public long TodayBytes { get; private set; }
-    public long CurrentDownloadSpeed { get; private set; }
-    public long CurrentUploadSpeed { get; private set; }
-    public string NetworkSource { get; private set; } = "Unknown";
     public long TodayDownloadBytes { get; private set; }
     public long TodayUploadBytes { get; private set; }
 
+    public long CurrentDownloadSpeed { get; private set; }
+    public long CurrentUploadSpeed { get; private set; }
+
+    public string NetworkSource { get; private set; } = "Unknown";
+
     public string GetCurrentSpeed()
     {
+        if (_externalMode)
+        {
+            var extNow = DateTime.Now;
+            var extSeconds = Math.Max((extNow - _lastTime).TotalSeconds, 0.001);
+
+            TodayDownloadBytes += (long)(CurrentDownloadSpeed * extSeconds);
+            TodayUploadBytes += (long)(CurrentUploadSpeed * extSeconds);
+            TodayBytes = TodayDownloadBytes + TodayUploadBytes;
+
+            _lastTime = extNow;
+
+            return FormatSpeed(CurrentDownloadSpeed + CurrentUploadSpeed);
+        }
+
         var interfaces = NetworkInterface.GetAllNetworkInterfaces()
             .Where(n =>
                 n.OperationalStatus == OperationalStatus.Up &&
@@ -39,16 +57,22 @@ public class NetworkSpeedService
             sent += stats.BytesSent;
 
             var properties = item.GetIPProperties();
+
             var hasGateway = properties.GatewayAddresses.Any(g =>
-                g.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+                g.Address.AddressFamily ==
+                System.Net.Sockets.AddressFamily.InterNetwork);
 
             if (!hasGateway)
                 continue;
 
             if (item.NetworkInterfaceType == NetworkInterfaceType.Wireless80211)
+            {
                 NetworkSource = "WiFi";
+            }
             else if (item.NetworkInterfaceType == NetworkInterfaceType.Ethernet)
+            {
                 NetworkSource = "Ethernet";
+            }
         }
 
         var now = DateTime.Now;
@@ -56,13 +80,11 @@ public class NetworkSpeedService
 
         var diffReceived = Math.Max(received - _lastReceived, 0);
         var diffSent = Math.Max(sent - _lastSent, 0);
-        var diffTotal = diffReceived + diffSent;
 
         TodayDownloadBytes += diffReceived;
         TodayUploadBytes += diffSent;
         TodayBytes = TodayDownloadBytes + TodayUploadBytes;
 
-        // Windows NetworkInterface gives BYTES, not bits.
         CurrentDownloadSpeed = (long)(diffReceived / seconds);
         CurrentUploadSpeed = (long)(diffSent / seconds);
 
@@ -73,14 +95,23 @@ public class NetworkSpeedService
         return FormatSpeed(CurrentDownloadSpeed + CurrentUploadSpeed);
     }
 
-    public string GetTodayDownloadUsage()
+    public void SetExternalSpeed(
+        long downloadBytesPerSecond,
+        long uploadBytesPerSecond,
+        string source)
     {
-        return FormatBytes(TodayDownloadBytes);
+        _externalMode = true;
+        CurrentDownloadSpeed = downloadBytesPerSecond;
+        CurrentUploadSpeed = uploadBytesPerSecond;
+        NetworkSource = source;
     }
 
-    public string GetTodayUploadUsage()
+    public void ClearExternalSpeed()
     {
-        return FormatBytes(TodayUploadBytes);
+        _externalMode = false;
+        CurrentDownloadSpeed = 0;
+        CurrentUploadSpeed = 0;
+        NetworkSource = "Not connected";
     }
 
     public string GetCurrentDownloadSpeed()
@@ -93,9 +124,37 @@ public class NetworkSpeedService
         return FormatSpeed(CurrentUploadSpeed);
     }
 
+    public string GetTodayDownloadUsage()
+    {
+        return FormatBytes(TodayDownloadBytes);
+    }
+
+    public string GetTodayUploadUsage()
+    {
+        return FormatBytes(TodayUploadBytes);
+    }
+
     public string GetTodayUsage()
     {
         return FormatBytes(TodayBytes);
+    }
+
+    public void ResetTodayUsage()
+    {
+        TodayBytes = 0;
+        TodayDownloadBytes = 0;
+        TodayUploadBytes = 0;
+
+        var interfaces = NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n =>
+                n.OperationalStatus == OperationalStatus.Up &&
+                n.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                n.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
+            .ToList();
+
+        _lastReceived = interfaces.Sum(i => i.GetIPv4Statistics().BytesReceived);
+        _lastSent = interfaces.Sum(i => i.GetIPv4Statistics().BytesSent);
+        _lastTime = DateTime.Now;
     }
 
     public static string FormatSpeed(double bytesPerSecond)
@@ -120,7 +179,6 @@ public class NetworkSpeedService
         }
 
         var kb = bytesPerSecond / KB;
-
         return $"{Math.Round(kb):0} KB/s";
     }
 
@@ -140,23 +198,5 @@ public class NetworkSpeedService
             return $"{bytes / KB:0.0} KB";
 
         return $"{bytes} B";
-    }
-
-    public void ResetTodayUsage()
-    {
-        TodayBytes = 0;
-        TodayDownloadBytes = 0;
-        TodayUploadBytes = 0;
-
-        var interfaces = NetworkInterface.GetAllNetworkInterfaces()
-            .Where(n =>
-                n.OperationalStatus == OperationalStatus.Up &&
-                n.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
-                n.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
-            .ToList();
-
-        _lastReceived = interfaces.Sum(i => i.GetIPv4Statistics().BytesReceived);
-        _lastSent = interfaces.Sum(i => i.GetIPv4Statistics().BytesSent);
-        _lastTime = DateTime.Now;
     }
 }

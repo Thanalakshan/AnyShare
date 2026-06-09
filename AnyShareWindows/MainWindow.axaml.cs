@@ -13,6 +13,8 @@ public partial class MainWindow : Window
     private readonly SettingsService _settings = new();
     private readonly UsageHistoryService _usageHistory = new();
     private readonly ClipboardShareService _clipboardShare = new();
+    private readonly NetworkSharingService _networkSharing = new();
+    private readonly DispatcherTimer _networkSharingTimer = new();
 
     private readonly DispatcherTimer _timer = new();
 
@@ -24,6 +26,16 @@ public partial class MainWindow : Window
         InitializeComponent();
 
         LoadSettings();
+
+        _networkSharingTimer.Interval = TimeSpan.FromSeconds(2);
+        _networkSharingTimer.Tick += async (_, _) =>
+        {
+            if (SharingToggle.IsChecked == true)
+            {
+                await AutoConnectNetworkSharing();
+            }
+        };
+        _networkSharingTimer.Start();
 
         SpeedCard.Click += (_, _) =>
         {
@@ -121,6 +133,21 @@ public partial class MainWindow : Window
         _timer.Interval = TimeSpan.FromSeconds(1);
         _timer.Tick += (_, _) =>
         {
+            if (SharingToggle.IsChecked == true)
+            {
+                _networkSharing.UpdateSpeed();
+
+                App.NetworkSpeed.SetExternalSpeed(
+                    _networkSharing.CurrentDownloadSpeed,
+                    _networkSharing.CurrentUploadSpeed,
+                    "AnyShare"
+                );
+            }
+            else
+            {
+                App.NetworkSpeed.ClearExternalSpeed();
+            }
+
             if (SpeedToggle.IsChecked == true)
             {
                 App.NetworkSpeed.GetCurrentSpeed();
@@ -151,6 +178,7 @@ public partial class MainWindow : Window
             }
         };
 
+        _timer.Start();
         UpdateHistoryDisplay();
     }
 
@@ -286,15 +314,34 @@ public partial class MainWindow : Window
     {
         if (SharingToggle.IsChecked == true)
         {
-            if (!await _adb.IsDeviceConnected())
-            {
-                _isUpdatingToggle = true;
-                SharingToggle.IsChecked = false;
-                _isUpdatingToggle = false;
-                return;
-            }
+            await AutoConnectNetworkSharing();
+        }
+        else
+        {
+            await _adb.RemoveNetworkBridge();
+            _networkSharing.DisableWindowsProxy();
+        }
+    }
 
-            await _adb.SetupNetworkBridge();
+    private async Task AutoConnectNetworkSharing()
+    {
+        var connected = await _adb.IsDeviceConnected();
+
+        if (!connected)
+        {
+            _networkSharing.DisableWindowsProxy();
+            return;
+        }
+
+        var bridgeOk = await _adb.SetupNetworkBridge();
+
+        if (bridgeOk)
+        {
+            _networkSharing.EnableWindowsProxy();
+        }
+        else
+        {
+            _networkSharing.DisableWindowsProxy();
         }
     }
 

@@ -57,6 +57,7 @@ public partial class App : Application
 
             desktop.ShutdownRequested += (_, _) =>
             {
+                CleanupNetworkSharing();
                 _trayUpdateTimer?.Stop();
                 SpeedWidget?.Close();
                 _trayIcon?.Dispose();
@@ -150,6 +151,8 @@ public partial class App : Application
     {
         _allowExit = true;
 
+        CleanupNetworkSharing();
+
         _trayUpdateTimer?.Stop();
         SpeedWidget?.Close();
         _trayIcon?.Dispose();
@@ -157,6 +160,17 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.Shutdown();
+        }
+    }
+
+    private static void CleanupNetworkSharing()
+    {
+        try
+        {
+            new NetworkSharingService().DisableWindowsProxy();
+        }
+        catch
+        {
         }
     }
 }

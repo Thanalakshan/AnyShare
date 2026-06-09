@@ -1,7 +1,7 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Diagnostics;
 
 namespace AnyShareWindows.Services;
 
@@ -10,37 +10,96 @@ public class AdbService
     public async Task<bool> IsDeviceConnected()
     {
         var output = await RunAdb("devices");
-        return output.Split('\n').Any(line => line.Contains("\tdevice"));
+
+        return output
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Any(line =>
+                line.Contains("\tdevice") &&
+                !line.StartsWith("List of devices"));
     }
 
-    public async Task SetupClipboardBridge()
+    public async Task<bool> SetupClipboardBridge()
     {
         await RunAdb("forward tcp:18765 tcp:8765");
+        return true;
     }
 
-    public async Task SetupNetworkBridge()
+    public async Task<bool> RemoveClipboardBridge()
     {
-        await RunAdb("forward tcp:18888 tcp:8888");
+        await RunAdb("forward --remove tcp:18765");
+        return true;
+    }
+
+    public async Task<bool> SetupNetworkBridge()
+    {
+        await RunAdb("forward tcp:18889 tcp:8888");
+        return true;
+    }
+
+    public async Task<bool> RemoveNetworkBridge()
+    {
+        await RunAdb("forward --remove tcp:18889");
+        return true;
+    }
+
+    public async Task<bool> RemoveAllForwards()
+    {
+        await RunAdb("forward --remove-all");
+        return true;
+    }
+
+    public async Task<bool> RestartServer()
+    {
+        await RunAdb("kill-server");
+        await RunAdb("start-server");
+        return true;
+    }
+
+    public async Task<string> GetDeviceName()
+    {
+        var name = await RunAdb("shell getprop ro.product.model");
+
+        return string.IsNullOrWhiteSpace(name)
+            ? "Android Device"
+            : name.Trim();
+    }
+
+    public async Task<bool> IsVpnActive()
+    {
+        var output = await RunAdb("shell dumpsys connectivity");
+
+        return output.Contains("VPN", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<string> RunAdb(string args)
     {
-        var psi = new ProcessStartInfo
+        try
         {
-            FileName = "adb",
-            Arguments = args,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+            var psi = new ProcessStartInfo
+            {
+                FileName = "adb",
+                Arguments = args,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
 
-        using var process = Process.Start(psi);
-        if (process == null) return "";
+            using var process = Process.Start(psi);
 
-        var output = await process.StandardOutput.ReadToEndAsync();
-        await process.WaitForExitAsync();
+            if (process == null)
+                return "";
 
-        return output;
+            var output = await process.StandardOutput.ReadToEndAsync();
+            var error = await process.StandardError.ReadToEndAsync();
+
+            await process.WaitForExitAsync();
+
+            return string.IsNullOrWhiteSpace(output) ? error : output;
+        }
+        catch
+        {
+            return "";
+        }
     }
 }
