@@ -178,6 +178,21 @@
                 </Grid>
             </Button>
 
+            <StackPanel x:Name="ClipboardActionsPanel"
+                        IsVisible="False"
+                        Spacing="8"
+                        HorizontalAlignment="Stretch">
+                        
+
+                <Button x:Name="SendClipboardButton"
+                        Classes="primaryAction"
+                        Content="Send Clipboard to Android"/>
+
+                <Button x:Name="ReceiveClipboardButton"
+                        Classes="primaryAction"
+                        Content="Receive Clipboard from Android"/>
+                            </StackPanel>
+
             <Button x:Name="StartupCard" Classes="toggleCard">
                 <Grid ColumnDefinitions="*,Auto">
                     <TextBlock Text="Open at Startup"

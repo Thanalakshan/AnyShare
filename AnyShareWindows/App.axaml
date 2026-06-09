@@ -6,6 +6,36 @@
     <Application.Styles>
         <FluentTheme />
 
+        <Style Selector="Button.primaryAction">
+            <Setter Property="Background" Value="#3A86FF"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#3A86FF"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="16,12"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        </Style>
+
+        <Style Selector="Button.primaryAction /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3A86FF"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#3A86FF"/>
+        </Style>
+
+        <Style Selector="Button.primaryAction:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3A86FF"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#3A86FF"/>
+        </Style>
+
+        <Style Selector="Button.primaryAction:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3A86FF"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#3A86FF"/>
+        </Style>
+
         <Style Selector="Border.card">
             <Setter Property="Background" Value="#111115"/>
             <Setter Property="BorderBrush" Value="#1E1E24"/>

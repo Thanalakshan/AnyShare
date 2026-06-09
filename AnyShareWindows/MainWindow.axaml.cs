@@ -15,7 +15,6 @@ public partial class MainWindow : Window
     private readonly ClipboardShareService _clipboardShare = new();
 
     private readonly DispatcherTimer _timer = new();
-    private readonly DispatcherTimer _clipboardTimer = new();
 
     private bool _historyExpanded = false;
     private bool _isUpdatingToggle = false;
@@ -92,6 +91,18 @@ public partial class MainWindow : Window
             SaveSettings();
         };
 
+        SendClipboardButton.Click += async (_, _) =>
+        {
+            await _clipboardShare.SetupAdbBridge();
+            await _clipboardShare.SendWindowsClipboardToAndroid();
+        };
+
+        ReceiveClipboardButton.Click += async (_, _) =>
+        {
+            await _clipboardShare.SetupAdbBridge();
+            await _clipboardShare.ReceiveAndroidClipboardToWindows();
+        };
+
         StartupCard.Click += (_, _) =>
         {
             StartupToggle.IsChecked = !(StartupToggle.IsChecked ?? false);
@@ -140,18 +151,6 @@ public partial class MainWindow : Window
             }
         };
 
-        _clipboardTimer.Interval = TimeSpan.FromSeconds(1);
-        _clipboardTimer.Tick += async (_, _) =>
-        {
-            if (ClipboardToggle.IsChecked == true)
-            {
-                await _clipboardShare.SyncClipboard();
-            }
-        };
-
-        _timer.Start();
-        _clipboardTimer.Start();
-
         UpdateHistoryDisplay();
     }
 
@@ -167,6 +166,7 @@ public partial class MainWindow : Window
         StartupToggle.IsChecked = settings.OpenAtStartup;
 
         SpeedDetailsPanel.IsVisible = settings.NetworkSpeedMonitor;
+        ClipboardActionsPanel.IsVisible = settings.ClipboardSharing;
 
         if (settings.NetworkSpeedMonitor)
         {
@@ -300,12 +300,16 @@ public partial class MainWindow : Window
 
     private async Task OnClipboardChanged()
     {
+        ClipboardActionsPanel.IsVisible =
+            ClipboardToggle.IsChecked == true;
+
         if (ClipboardToggle.IsChecked == true)
         {
             if (!await _adb.IsDeviceConnected())
             {
                 _isUpdatingToggle = true;
                 ClipboardToggle.IsChecked = false;
+                ClipboardActionsPanel.IsVisible = false;
                 _isUpdatingToggle = false;
                 return;
             }
