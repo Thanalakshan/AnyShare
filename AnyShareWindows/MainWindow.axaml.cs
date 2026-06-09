@@ -12,8 +12,11 @@ public partial class MainWindow : Window
     private readonly StartupService _startup = new();
     private readonly SettingsService _settings = new();
     private readonly UsageHistoryService _usageHistory = new();
+    private readonly ClipboardShareService _clipboardShare = new();
 
     private readonly DispatcherTimer _timer = new();
+    private readonly DispatcherTimer _clipboardTimer = new();
+
     private bool _historyExpanded = false;
     private bool _isUpdatingToggle = false;
 
@@ -57,6 +60,7 @@ public partial class MainWindow : Window
             DownloadUsageText.Text = "0 MB";
             UploadUsageText.Text = "0 MB";
             TodayUsageText.Text = "0 MB";
+
             UpdateHistoryDisplay();
         };
 
@@ -108,14 +112,18 @@ public partial class MainWindow : Window
         {
             if (SpeedToggle.IsChecked == true)
             {
+                App.NetworkSpeed.GetCurrentSpeed();
+
                 var downloadSpeed = App.NetworkSpeed.GetCurrentDownloadSpeed();
                 var uploadSpeed = App.NetworkSpeed.GetCurrentUploadSpeed();
 
                 DownloadSpeedText.Text = downloadSpeed;
                 UploadSpeedText.Text = uploadSpeed;
+
                 DownloadUsageText.Text = App.NetworkSpeed.GetTodayDownloadUsage();
                 UploadUsageText.Text = App.NetworkSpeed.GetTodayUploadUsage();
                 TodayUsageText.Text = App.NetworkSpeed.GetTodayUsage();
+
                 NetworkSourceText.Text = App.NetworkSpeed.NetworkSource;
 
                 App.SpeedWidget?.UpdateSpeed(uploadSpeed, downloadSpeed);
@@ -132,7 +140,18 @@ public partial class MainWindow : Window
             }
         };
 
+        _clipboardTimer.Interval = TimeSpan.FromSeconds(1);
+        _clipboardTimer.Tick += async (_, _) =>
+        {
+            if (ClipboardToggle.IsChecked == true)
+            {
+                await _clipboardShare.SyncClipboard();
+            }
+        };
+
         _timer.Start();
+        _clipboardTimer.Start();
+
         UpdateHistoryDisplay();
     }
 
@@ -292,6 +311,7 @@ public partial class MainWindow : Window
             }
 
             await _adb.SetupClipboardBridge();
+            await _clipboardShare.SetupAdbBridge();
         }
     }
 

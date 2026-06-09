@@ -32,6 +32,10 @@
         </activity>
 
         <service
+            android:name=".ClipboardBridgeService"
+            android:exported="false" />
+
+        <service
             android:name=".NetworkSpeedService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />

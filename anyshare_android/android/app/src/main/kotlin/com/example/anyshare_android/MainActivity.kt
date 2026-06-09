@@ -11,6 +11,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private val speedChannel = "anyshare/network_speed"
     private val deviceChannel = "anyshare/device"
+    private val clipboardChannel = "anyshare/clipboard"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -37,6 +38,24 @@ class MainActivity : FlutterActivity() {
 
                     "isSpeedServiceRunning" -> {
                         result.success(NetworkSpeedService.isRunning)
+                    }
+
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, clipboardChannel)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "startClipboardBridge" -> {
+                        val intent = Intent(this, ClipboardBridgeService::class.java)
+                        startService(intent)
+                        result.success(true)
+                    }
+
+                    "stopClipboardBridge" -> {
+                        stopService(Intent(this, ClipboardBridgeService::class.java))
+                        result.success(true)
                     }
 
                     else -> result.notImplemented()
