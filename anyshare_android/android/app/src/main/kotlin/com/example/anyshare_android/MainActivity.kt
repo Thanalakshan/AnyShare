@@ -108,6 +108,20 @@ class MainActivity : FlutterActivity() {
                         result.success(enabled)
                     }
 
+                    "startNetworkProxy" -> {
+                        startService(Intent(this, NetworkProxyService::class.java))
+                        result.success(true)
+                    }
+
+                    "stopNetworkProxy" -> {
+                        stopService(Intent(this, NetworkProxyService::class.java))
+                        result.success(true)
+                    }
+
+                    "isNetworkProxyRunning" -> {
+                        result.success(NetworkProxyService.isRunning)
+                    }
+
                     "isOverlayPermissionGranted" -> {
                         result.success(Settings.canDrawOverlays(this))
                     }

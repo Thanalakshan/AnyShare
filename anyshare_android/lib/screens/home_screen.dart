@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../services/clipboard_bridge_service.dart';
+import '../services/network_proxy_service.dart';
 import '../services/network_speed_service.dart';
 import '../services/settings_service.dart';
 import '../services/usb_debug_service.dart';
@@ -18,6 +19,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final UsbDebugService _usbDebugService = UsbDebugService();
   final SettingsService _settingsService = SettingsService();
   final ClipboardBridgeService _clipboardBridge = ClipboardBridgeService();
+  final NetworkProxyService _networkProxy = NetworkProxyService();
 
   bool speedEnabled = false;
   bool clipboardEnabled = false;
@@ -32,17 +34,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadSettings() async {
     final serviceRunning = await _speedService.isNotificationRunning();
+    final proxyRunning = await _networkProxy.isProxyRunning();
 
     await _settingsService.setSpeedEnabled(serviceRunning);
     await _settingsService.setClipboardEnabled(false);
-    await _settingsService.setNetworkEnabled(false);
+    await _settingsService.setNetworkEnabled(proxyRunning);
 
     if (!mounted) return;
 
     setState(() {
       speedEnabled = serviceRunning;
       clipboardEnabled = false;
-      networkSharingEnabled = false;
+      networkSharingEnabled = proxyRunning;
       loading = false;
     });
   }
@@ -120,6 +123,10 @@ class _HomeScreenState extends State<HomeScreen> {
     if (value) {
       final ok = await _checkUsbDebugging();
       if (!ok) return;
+
+      await _networkProxy.startProxy();
+    } else {
+      await _networkProxy.stopProxy();
     }
 
     await _settingsService.setNetworkEnabled(value);
@@ -188,6 +195,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _infoText(String text) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1B2A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF1B3A5A)),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontSize: 13,
+          color: Color(0xFFBFD7FF),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (loading) {
@@ -236,6 +263,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 value: networkSharingEnabled,
                 onChanged: _toggleNetworkSharing,
               ),
+
+              if (networkSharingEnabled)
+                _infoText(
+                  'Network proxy is running. Connect the phone with USB debugging, then turn on Network Sharing in the Windows app.',
+                ),
 
               _toggleRow(
                 title: 'Clipboard Sharing',
