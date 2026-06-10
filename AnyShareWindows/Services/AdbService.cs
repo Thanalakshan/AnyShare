@@ -30,6 +30,24 @@ public class AdbService
         return true;
     }
 
+    public async Task<bool> IsNetworkBridgeForwarded()
+    {
+        var output = await RunAdb("forward --list");
+
+        return output
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Any(line =>
+                line.Contains("tcp:18889", StringComparison.Ordinal) &&
+                line.Contains("tcp:8888", StringComparison.Ordinal));
+    }
+
+    public async Task<bool> IsAndroidNetworkProxyRunning()
+    {
+        var output = await RunAdb("shell dumpsys activity services");
+
+        return output.Contains("NetworkProxyService", StringComparison.OrdinalIgnoreCase);
+    }
+
     public async Task<bool> SetupNetworkBridge()
     {
         await RunAdb("forward tcp:18889 tcp:8888");

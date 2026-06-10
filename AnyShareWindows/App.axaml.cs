@@ -110,6 +110,7 @@ public partial class App : Application
 
             if (settings.NetworkSpeedMonitor)
             {
+                _mainWindow?.RefreshNetworkSharingSpeedIfActive();
                 NetworkSpeed.GetCurrentSpeed();
 
                 var download = NetworkSpeed.GetCurrentDownloadSpeed();

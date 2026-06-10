@@ -12,6 +12,9 @@ public partial class TaskbarWidgetWindow : Window
     private const int WidgetHeight = 38;
 
     private readonly DispatcherTimer _attachTimer = new();
+    private bool _embeddedInTaskbar;
+    private int _lastX = int.MinValue;
+    private int _lastY = int.MinValue;
 
     public TaskbarWidgetWindow()
     {
@@ -26,8 +29,15 @@ public partial class TaskbarWidgetWindow : Window
 
     public void UpdateSpeed(string uploadSpeed, string downloadSpeed)
     {
-        UploadText.Text = uploadSpeed;
-        DownloadText.Text = downloadSpeed;
+        if (!string.Equals(UploadText.Text, uploadSpeed, StringComparison.Ordinal))
+        {
+            UploadText.Text = uploadSpeed;
+        }
+
+        if (!string.Equals(DownloadText.Text, downloadSpeed, StringComparison.Ordinal))
+        {
+            DownloadText.Text = downloadSpeed;
+        }
     }
 
     private void AttachToTaskbar()
@@ -40,18 +50,23 @@ public partial class TaskbarWidgetWindow : Window
 
         var trayHandle = FindWindowEx(taskbarHandle, IntPtr.Zero, "TrayNotifyWnd", null);
 
-        SetParent(widgetHandle, taskbarHandle);
+        if (!_embeddedInTaskbar)
+        {
+            SetParent(widgetHandle, taskbarHandle);
 
-        var style = GetWindowLongPtr(widgetHandle, GWL_STYLE).ToInt64();
-        style &= ~WS_POPUP;
-        style |= WS_CHILD;
-        SetWindowLongPtr(widgetHandle, GWL_STYLE, new IntPtr(style));
+            var style = GetWindowLongPtr(widgetHandle, GWL_STYLE).ToInt64();
+            style &= ~WS_POPUP;
+            style |= WS_CHILD;
+            SetWindowLongPtr(widgetHandle, GWL_STYLE, new IntPtr(style));
 
-        var exStyle = GetWindowLongPtr(widgetHandle, GWL_EXSTYLE).ToInt64();
-        exStyle |= WS_EX_TOOLWINDOW;
-        exStyle |= WS_EX_NOACTIVATE;
-        exStyle &= ~WS_EX_APPWINDOW;
-        SetWindowLongPtr(widgetHandle, GWL_EXSTYLE, new IntPtr(exStyle));
+            var exStyle = GetWindowLongPtr(widgetHandle, GWL_EXSTYLE).ToInt64();
+            exStyle |= WS_EX_TOOLWINDOW;
+            exStyle |= WS_EX_NOACTIVATE;
+            exStyle &= ~WS_EX_APPWINDOW;
+            SetWindowLongPtr(widgetHandle, GWL_EXSTYLE, new IntPtr(exStyle));
+
+            _embeddedInTaskbar = true;
+        }
 
         GetWindowRect(taskbarHandle, out var taskbarRect);
 
@@ -82,6 +97,12 @@ public partial class TaskbarWidgetWindow : Window
         if (x < 0) x = 5;
         if (y < 0) y = 5;
 
+        if (x == _lastX && y == _lastY)
+            return;
+
+        _lastX = x;
+        _lastY = y;
+
         SetWindowPos(
             widgetHandle,
             HWND_TOP,
@@ -89,7 +110,7 @@ public partial class TaskbarWidgetWindow : Window
             y,
             WidgetWidth,
             WidgetHeight,
-            SWP_SHOWWINDOW
+            SWP_SHOWWINDOW | SWP_NOACTIVATE
         );
     }
 
@@ -112,6 +133,7 @@ public partial class TaskbarWidgetWindow : Window
     private static readonly IntPtr HWND_TOP = IntPtr.Zero;
 
     private const uint SWP_SHOWWINDOW = 0x0040;
+    private const uint SWP_NOACTIVATE = 0x0010;
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern IntPtr FindWindow(string lpClassName, string? lpWindowName);

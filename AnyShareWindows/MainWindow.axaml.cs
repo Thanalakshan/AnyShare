@@ -16,10 +16,9 @@ public partial class MainWindow : Window
     private readonly NetworkSharingService _networkSharing = new();
     private readonly DispatcherTimer _networkSharingTimer = new();
 
-    private readonly DispatcherTimer _timer = new();
-
     private bool _historyExpanded = false;
     private bool _isUpdatingToggle = false;
+    private bool _anyShareTunnelActive;
 
     public MainWindow()
     {
@@ -27,12 +26,19 @@ public partial class MainWindow : Window
 
         LoadSettings();
 
+        App.NetworkSpeed.Updated += OnNetworkSpeedUpdated;
+
         _networkSharingTimer.Interval = TimeSpan.FromSeconds(2);
         _networkSharingTimer.Tick += async (_, _) =>
         {
             if (SharingToggle.IsChecked == true)
             {
                 await AutoConnectNetworkSharing();
+                await UpdateAnyShareTunnelState();
+            }
+            else
+            {
+                _anyShareTunnelActive = false;
             }
         };
         _networkSharingTimer.Start();
@@ -130,56 +136,48 @@ public partial class MainWindow : Window
 
         Closing += (_, _) => SaveSettings();
 
-        _timer.Interval = TimeSpan.FromSeconds(1);
-        _timer.Tick += (_, _) =>
-        {
-            if (SharingToggle.IsChecked == true)
-            {
-                _networkSharing.UpdateSpeed();
-
-                App.NetworkSpeed.SetExternalSpeed(
-                    _networkSharing.CurrentDownloadSpeed,
-                    _networkSharing.CurrentUploadSpeed,
-                    "AnyShare"
-                );
-            }
-            else
-            {
-                App.NetworkSpeed.ClearExternalSpeed();
-            }
-
-            if (SpeedToggle.IsChecked == true)
-            {
-                App.NetworkSpeed.GetCurrentSpeed();
-
-                var downloadSpeed = App.NetworkSpeed.GetCurrentDownloadSpeed();
-                var uploadSpeed = App.NetworkSpeed.GetCurrentUploadSpeed();
-
-                DownloadSpeedText.Text = downloadSpeed;
-                UploadSpeedText.Text = uploadSpeed;
-
-                DownloadUsageText.Text = App.NetworkSpeed.GetTodayDownloadUsage();
-                UploadUsageText.Text = App.NetworkSpeed.GetTodayUploadUsage();
-                TodayUsageText.Text = App.NetworkSpeed.GetTodayUsage();
-
-                NetworkSourceText.Text = App.NetworkSpeed.NetworkSource;
-
-                App.SpeedWidget?.UpdateSpeed(uploadSpeed, downloadSpeed);
-
-                _usageHistory.UpdateTodayUsage(
-                    App.NetworkSpeed.CurrentDownloadSpeed + App.NetworkSpeed.CurrentUploadSpeed,
-                    App.NetworkSpeed.NetworkSource
-                );
-
-                if (_historyExpanded)
-                {
-                    UpdateHistoryDisplay();
-                }
-            }
-        };
-
-        _timer.Start();
         UpdateHistoryDisplay();
+    }
+
+    public void RefreshNetworkSharingSpeedIfActive()
+    {
+        if (SharingToggle.IsChecked != true || !_anyShareTunnelActive)
+            return;
+
+        _networkSharing.UpdateSpeed();
+        App.NetworkSpeed.SetExternalSpeed(
+            _networkSharing.CurrentDownloadSpeed,
+            _networkSharing.CurrentUploadSpeed,
+            "AnyShare"
+        );
+    }
+
+    private async Task UpdateAnyShareTunnelState()
+    {
+        var wasActive = _anyShareTunnelActive;
+
+        if (SharingToggle.IsChecked != true)
+        {
+            _anyShareTunnelActive = false;
+
+            if (wasActive)
+                App.NetworkSpeed.ClearExternalSpeed();
+
+            return;
+        }
+
+        var deviceConnected = await _adb.IsDeviceConnected();
+        var bridgeForwarded = deviceConnected && await _adb.IsNetworkBridgeForwarded();
+        var androidProxyRunning = deviceConnected && await _adb.IsAndroidNetworkProxyRunning();
+
+        _anyShareTunnelActive =
+            deviceConnected &&
+            bridgeForwarded &&
+            androidProxyRunning &&
+            _networkSharing.IsProxyRunning;
+
+        if (wasActive && !_anyShareTunnelActive)
+            App.NetworkSpeed.ClearExternalSpeed();
     }
 
     private void LoadSettings()
@@ -310,14 +308,40 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnNetworkSpeedUpdated()
+    {
+        if (SpeedToggle.IsChecked != true)
+            return;
+
+        DownloadSpeedText.Text = App.NetworkSpeed.GetCurrentDownloadSpeed();
+        UploadSpeedText.Text = App.NetworkSpeed.GetCurrentUploadSpeed();
+        DownloadUsageText.Text = App.NetworkSpeed.GetTodayDownloadUsage();
+        UploadUsageText.Text = App.NetworkSpeed.GetTodayUploadUsage();
+        TodayUsageText.Text = App.NetworkSpeed.GetTodayUsage();
+        NetworkSourceText.Text = App.NetworkSpeed.NetworkSource;
+
+        _usageHistory.UpdateTodayUsage(
+            App.NetworkSpeed.CurrentDownloadSpeed + App.NetworkSpeed.CurrentUploadSpeed,
+            App.NetworkSpeed.NetworkSource
+        );
+
+        if (_historyExpanded)
+        {
+            UpdateHistoryDisplay();
+        }
+    }
+
     private async Task OnNetworkSharingChanged()
     {
         if (SharingToggle.IsChecked == true)
         {
             await AutoConnectNetworkSharing();
+            await UpdateAnyShareTunnelState();
         }
         else
         {
+            _anyShareTunnelActive = false;
+            App.NetworkSpeed.ClearExternalSpeed();
             await _adb.RemoveNetworkBridge();
             _networkSharing.DisableWindowsProxy();
         }

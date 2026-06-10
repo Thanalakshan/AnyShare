@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Net.NetworkInformation;
+using System.Net.Sockets;
 
 namespace AnyShareWindows.Services;
 
@@ -10,6 +13,7 @@ public class NetworkSpeedService
     private long _lastSent;
     private DateTime _lastTime = DateTime.Now;
 
+    private bool _baselineSet;
     private bool _externalMode = false;
 
     public long TodayBytes { get; private set; }
@@ -20,6 +24,8 @@ public class NetworkSpeedService
     public long CurrentUploadSpeed { get; private set; }
 
     public string NetworkSource { get; private set; } = "Unknown";
+
+    public event Action? Updated;
 
     public string GetCurrentSpeed()
     {
@@ -34,48 +40,40 @@ public class NetworkSpeedService
 
             _lastTime = extNow;
 
-            return FormatSpeed(CurrentDownloadSpeed + CurrentUploadSpeed);
+            var externalTotal = FormatSpeed(CurrentDownloadSpeed + CurrentUploadSpeed);
+            Updated?.Invoke();
+            return externalTotal;
         }
 
-        var interfaces = NetworkInterface.GetAllNetworkInterfaces()
-            .Where(n =>
-                n.OperationalStatus == OperationalStatus.Up &&
-                n.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
-                n.NetworkInterfaceType != NetworkInterfaceType.Tunnel &&
-                n.GetIPv4Statistics().BytesReceived > 0)
-            .ToList();
+        var interfaces = GetActiveInterfaces();
 
         long received = 0;
         long sent = 0;
-        NetworkSource = "Not connected";
 
         foreach (var item in interfaces)
         {
             var stats = item.GetIPv4Statistics();
-
             received += stats.BytesReceived;
             sent += stats.BytesSent;
-
-            var properties = item.GetIPProperties();
-
-            var hasGateway = properties.GatewayAddresses.Any(g =>
-                g.Address.AddressFamily ==
-                System.Net.Sockets.AddressFamily.InterNetwork);
-
-            if (!hasGateway)
-                continue;
-
-            if (item.NetworkInterfaceType == NetworkInterfaceType.Wireless80211)
-            {
-                NetworkSource = "WiFi";
-            }
-            else if (item.NetworkInterfaceType == NetworkInterfaceType.Ethernet)
-            {
-                NetworkSource = "Ethernet";
-            }
         }
 
+        NetworkSource = DetectNetworkSource();
+
         var now = DateTime.Now;
+
+        if (!_baselineSet)
+        {
+            _lastReceived = received;
+            _lastSent = sent;
+            _lastTime = now;
+            _baselineSet = true;
+            CurrentDownloadSpeed = 0;
+            CurrentUploadSpeed = 0;
+            var baselineTotal = FormatSpeed(0);
+            Updated?.Invoke();
+            return baselineTotal;
+        }
+
         var seconds = Math.Max((now - _lastTime).TotalSeconds, 0.001);
 
         var diffReceived = Math.Max(received - _lastReceived, 0);
@@ -92,7 +90,9 @@ public class NetworkSpeedService
         _lastSent = sent;
         _lastTime = now;
 
-        return FormatSpeed(CurrentDownloadSpeed + CurrentUploadSpeed);
+        var total = FormatSpeed(CurrentDownloadSpeed + CurrentUploadSpeed);
+        Updated?.Invoke();
+        return total;
     }
 
     public void SetExternalSpeed(
@@ -108,10 +108,81 @@ public class NetworkSpeedService
 
     public void ClearExternalSpeed()
     {
+        if (!_externalMode)
+            return;
+
         _externalMode = false;
+        _baselineSet = false;
         CurrentDownloadSpeed = 0;
         CurrentUploadSpeed = 0;
         NetworkSource = "Not connected";
+    }
+
+    private static string DetectNetworkSource()
+    {
+        var connected = GetConnectedInterfaces();
+
+        if (connected.Any(i => i.NetworkInterfaceType == NetworkInterfaceType.Ethernet))
+            return "Ethernet";
+
+        if (connected.Any(i =>
+                i.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 ||
+                IsLikelyWifiAdapter(i)))
+            return "WiFi";
+
+        return "Not connected";
+    }
+
+    private static List<NetworkInterface> GetActiveInterfaces()
+    {
+        return GetConnectedInterfaces();
+    }
+
+    private static List<NetworkInterface> GetConnectedInterfaces()
+    {
+        return NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n =>
+                n.OperationalStatus == OperationalStatus.Up &&
+                n.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                n.NetworkInterfaceType != NetworkInterfaceType.Tunnel &&
+                HasIpv4Connectivity(n))
+            .ToList();
+    }
+
+    private static bool HasIpv4Connectivity(NetworkInterface networkInterface)
+    {
+        var properties = networkInterface.GetIPProperties();
+
+        if (properties.GatewayAddresses.Any(g =>
+                g.Address.AddressFamily == AddressFamily.InterNetwork))
+        {
+            return true;
+        }
+
+        return properties.UnicastAddresses.Any(a =>
+            a.Address.AddressFamily == AddressFamily.InterNetwork &&
+            HasUsableIpv4Address(a.Address));
+    }
+
+    private static bool HasUsableIpv4Address(IPAddress address)
+    {
+        if (IPAddress.IsLoopback(address))
+            return false;
+
+        var bytes = address.GetAddressBytes();
+
+        // Exclude APIPA / link-local auto addresses.
+        return !(bytes[0] == 169 && bytes[1] == 254);
+    }
+
+    private static bool IsLikelyWifiAdapter(NetworkInterface networkInterface)
+    {
+        var description = networkInterface.Description;
+
+        return description.Contains("Wi-Fi", StringComparison.OrdinalIgnoreCase) ||
+               description.Contains("WiFi", StringComparison.OrdinalIgnoreCase) ||
+               description.Contains("Wireless", StringComparison.OrdinalIgnoreCase) ||
+               description.Contains("802.11", StringComparison.OrdinalIgnoreCase);
     }
 
     public string GetCurrentDownloadSpeed()
@@ -145,16 +216,12 @@ public class NetworkSpeedService
         TodayDownloadBytes = 0;
         TodayUploadBytes = 0;
 
-        var interfaces = NetworkInterface.GetAllNetworkInterfaces()
-            .Where(n =>
-                n.OperationalStatus == OperationalStatus.Up &&
-                n.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
-                n.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
-            .ToList();
+        var interfaces = GetActiveInterfaces();
 
         _lastReceived = interfaces.Sum(i => i.GetIPv4Statistics().BytesReceived);
         _lastSent = interfaces.Sum(i => i.GetIPv4Statistics().BytesSent);
         _lastTime = DateTime.Now;
+        _baselineSet = true;
     }
 
     public static string FormatSpeed(double bytesPerSecond)

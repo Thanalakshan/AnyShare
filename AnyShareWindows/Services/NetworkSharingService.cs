@@ -25,6 +25,8 @@ public class NetworkSharingService
     public long CurrentDownloadSpeed { get; private set; }
     public long CurrentUploadSpeed { get; private set; }
 
+    public bool IsProxyRunning => _listener != null;
+
     public void StartLocalProxy()
     {
         if (_listener != null) return;

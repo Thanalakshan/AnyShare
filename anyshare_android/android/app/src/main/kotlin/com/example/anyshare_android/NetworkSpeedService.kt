@@ -123,7 +123,7 @@ class NetworkSpeedService : Service() {
         } catch (_: Exception) {
         }
 
-        var numberTextSize = 100f
+        var numberTextSize = 115f
 
         paint.textSize = numberTextSize
         paint.letterSpacing = -0.16f
@@ -141,11 +141,11 @@ class NetworkSpeedService : Service() {
         paint.textSize = numberTextSize
         paint.textScaleX = 0.85f
         paint.letterSpacing = -0.10f
-        canvas.drawText(valueText, centerX, 95f, paint)
+        canvas.drawText(valueText, centerX, 68f, paint)
 
-        paint.textSize = numberTextSize * 0.78f
+        paint.textSize = numberTextSize * 0.70f
         paint.letterSpacing = -0.06f
-        canvas.drawText(unitText, centerX, 158f, paint)
+        canvas.drawText(unitText, centerX, 156f, paint)
 
         return IconCompat.createWithBitmap(bitmap)
     }
