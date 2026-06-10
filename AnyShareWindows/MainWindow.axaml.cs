@@ -203,6 +203,8 @@ public partial class MainWindow : Window
             App.SpeedWidget?.Hide();
         }
 
+        _startup.SetStartup(settings.OpenAtStartup);
+
         _isUpdatingToggle = false;
     }
 

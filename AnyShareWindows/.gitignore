@@ -48,7 +48,8 @@ coverage-report/
 
 # Windows installer outputs
 *.msi
-*.exe
+installer/output/
+publish/
 
 # Electron leftovers (if migrating from Electron)
 node_modules/

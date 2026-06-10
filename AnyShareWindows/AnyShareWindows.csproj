@@ -6,6 +6,18 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <ApplicationIcon>Assets\icon\icon.ico</ApplicationIcon>
+    <AssemblyName>AnyShareWindows</AssemblyName>
+    <Product>AnyShare</Product>
+    <Version>1.0.0</Version>
+    <Company>AnyShare</Company>
+    <Description>AnyShare Windows companion app</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
 
   <ItemGroup>
