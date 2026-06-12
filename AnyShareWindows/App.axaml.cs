@@ -34,8 +34,10 @@ public partial class App : Application
 
             _settings = new SettingsService();
 
-            _mainWindow = new MainWindow();
-            desktop.MainWindow = _mainWindow;
+            _mainWindow = new MainWindow
+            {
+                ShowActivated = false
+            };
 
             _mainWindow.Closing += (_, e) =>
             {
@@ -49,11 +51,10 @@ public partial class App : Application
             CreateTrayIcon();
 
             SpeedWidget = new TaskbarWidgetWindow();
+            SpeedWidget.OpenRequested += OpenWindow;
             SpeedWidget.Hide();
 
             StartTrayUpdateTimer();
-
-            _mainWindow.Hide();
 
             desktop.ShutdownRequested += (_, _) =>
             {
@@ -143,12 +144,16 @@ public partial class App : Application
     {
         _mainWindow ??= new MainWindow();
 
-        _mainWindow.Show();
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            desktop.MainWindow = _mainWindow;
+
+        _mainWindow.ShowActivated = true;
         _mainWindow.WindowState = WindowState.Normal;
+        _mainWindow.Show();
         _mainWindow.Activate();
     }
 
-    private void ExitApp()
+    public void ShutdownApplication()
     {
         _allowExit = true;
 
@@ -162,6 +167,11 @@ public partial class App : Application
         {
             desktop.Shutdown();
         }
+    }
+
+    private void ExitApp()
+    {
+        ShutdownApplication();
     }
 
     private static void CleanupNetworkSharing()

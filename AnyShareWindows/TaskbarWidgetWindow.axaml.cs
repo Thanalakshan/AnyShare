@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Threading;
 
 namespace AnyShareWindows;
@@ -16,15 +17,30 @@ public partial class TaskbarWidgetWindow : Window
     private int _lastX = int.MinValue;
     private int _lastY = int.MinValue;
 
+    public event Action? OpenRequested;
+
     public TaskbarWidgetWindow()
     {
         InitializeComponent();
 
         Opened += (_, _) => AttachToTaskbar();
+        PointerPressed += OnPointerPressed;
 
         _attachTimer.Interval = TimeSpan.FromSeconds(2);
         _attachTimer.Tick += (_, _) => AttachToTaskbar();
         _attachTimer.Start();
+    }
+
+    private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        var point = e.GetCurrentPoint(this);
+
+        if (point.Properties.PointerUpdateKind == PointerUpdateKind.LeftButtonPressed &&
+            e.ClickCount == 2)
+        {
+            OpenRequested?.Invoke();
+            e.Handled = true;
+        }
     }
 
     public void UpdateSpeed(string uploadSpeed, string downloadSpeed)

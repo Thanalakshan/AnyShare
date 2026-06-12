@@ -15,4 +15,10 @@ class NetworkProxyService {
     final result = await _channel.invokeMethod<bool>('isNetworkProxyRunning');
     return result ?? false;
   }
+
+  Future<bool> isSharingEnabled() async {
+    final result =
+        await _channel.invokeMethod<bool>('isNetworkSharingEnabled');
+    return result ?? false;
+  }
 }

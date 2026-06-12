@@ -1,8 +1,12 @@
 package com.example.anyshare_android
 
 import android.app.Service
+import android.database.ContentObserver
 import android.content.Intent
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.provider.Settings
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.ServerSocket
@@ -11,38 +15,97 @@ import kotlin.concurrent.thread
 
 class NetworkProxyService : Service() {
     private var serverSocket: ServerSocket? = null
+    @Volatile
     private var running = false
+    private val adbSettingsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            if (!isUsbDebuggingEnabled()) {
+                NetworkSharingStateStore.setEnabled(this@NetworkProxyService, false)
+                stopSelf()
+            }
+        }
+    }
 
     companion object {
+        @Volatile
         var isRunning = false
+
+        @Volatile
+        private var activeService: NetworkProxyService? = null
+
+        fun stopActiveProxy() {
+            isRunning = false
+            activeService?.stopProxy()
+        }
     }
 
     override fun onCreate() {
         super.onCreate()
+        activeService = this
+
+        contentResolver.registerContentObserver(
+            Settings.Global.getUriFor(Settings.Global.ADB_ENABLED),
+            false,
+            adbSettingsObserver
+        )
+
+        if (!isUsbDebuggingEnabled()) {
+            NetworkSharingStateStore.setEnabled(this, false)
+            stopSelf()
+            return
+        }
+
         startProxy()
     }
 
     override fun onDestroy() {
-        running = false
-        isRunning = false
-        serverSocket?.close()
+        stopProxy()
+        activeService = null
+        contentResolver.unregisterContentObserver(adbSettingsObserver)
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun isUsbDebuggingEnabled(): Boolean =
+        Settings.Global.getInt(
+            contentResolver,
+            Settings.Global.ADB_ENABLED,
+            0
+        ) == 1
+
+    private fun stopProxy() {
+        running = false
+        isRunning = false
+
+        try {
+            serverSocket?.close()
+        } catch (_: Exception) {
+        }
+
+        serverSocket = null
+    }
+
     private fun startProxy() {
         if (running) return
 
         running = true
-        isRunning = true
 
         thread(start = true) {
             try {
-                serverSocket = ServerSocket(8888)
+                val socket = ServerSocket(8888)
+                serverSocket = socket
+
+                if (!running) {
+                    socket.close()
+                    serverSocket = null
+                    return@thread
+                }
+
+                isRunning = true
 
                 while (running) {
-                    val client = serverSocket?.accept() ?: continue
+                    val client = socket.accept()
                     handleClient(client)
                 }
             } catch (_: Exception) {

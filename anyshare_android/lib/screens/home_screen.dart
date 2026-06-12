@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../services/clipboard_bridge_service.dart';
@@ -14,7 +16,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with WidgetsBindingObserver {
   final NetworkSpeedService _speedService = NetworkSpeedService();
   final UsbDebugService _usbDebugService = UsbDebugService();
   final SettingsService _settingsService = SettingsService();
@@ -25,27 +28,97 @@ class _HomeScreenState extends State<HomeScreen> {
   bool clipboardEnabled = false;
   bool networkSharingEnabled = false;
   bool loading = true;
+  Timer? _usbMonitor;
+  bool _checkingUsbDebugging = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadSettings();
+    _usbMonitor = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) => _monitorUsbDebugging(),
+    );
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _usbMonitor?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _syncNetworkSharingState();
+      _monitorUsbDebugging();
+    }
+  }
+
+  Future<void> _syncNetworkSharingState() async {
+    final enabled = await _networkProxy.isSharingEnabled();
+    await _settingsService.setNetworkEnabled(enabled);
+
+    if (!mounted || networkSharingEnabled == enabled) return;
+
+    setState(() {
+      networkSharingEnabled = enabled;
+    });
+  }
+
+  Future<void> _monitorUsbDebugging() async {
+    if (!networkSharingEnabled || _checkingUsbDebugging) return;
+
+    _checkingUsbDebugging = true;
+
+    try {
+      final enabled = await _usbDebugService.isUsbDebuggingEnabled();
+
+      if (enabled) return;
+
+      await _networkProxy.stopProxy();
+      await _settingsService.setNetworkEnabled(false);
+
+      if (!mounted) return;
+
+      setState(() {
+        networkSharingEnabled = false;
+      });
+    } finally {
+      _checkingUsbDebugging = false;
+    }
   }
 
   Future<void> _loadSettings() async {
     final serviceRunning = await _speedService.isNotificationRunning();
-    final proxyRunning = await _networkProxy.isProxyRunning();
+    final clipboardRunning = await _clipboardBridge.isBridgeRunning();
+    final networkEnabled = await _networkProxy.isSharingEnabled();
+    final usbDebuggingEnabled =
+        await _usbDebugService.isUsbDebuggingEnabled();
+
+    final shouldRunProxy = networkEnabled && usbDebuggingEnabled;
+
+    if (shouldRunProxy) {
+      await _networkProxy.startProxy();
+    } else {
+      await _networkProxy.stopProxy();
+    }
 
     await _settingsService.setSpeedEnabled(serviceRunning);
-    await _settingsService.setClipboardEnabled(false);
-    await _settingsService.setNetworkEnabled(proxyRunning);
+    await _settingsService.setClipboardEnabled(clipboardRunning);
+
+    if (networkEnabled && !usbDebuggingEnabled) {
+      await _settingsService.setNetworkEnabled(false);
+    }
 
     if (!mounted) return;
 
     setState(() {
       speedEnabled = serviceRunning;
-      clipboardEnabled = false;
-      networkSharingEnabled = proxyRunning;
+      clipboardEnabled = clipboardRunning;
+      networkSharingEnabled = shouldRunProxy;
       loading = false;
     });
   }
@@ -122,7 +195,19 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _toggleNetworkSharing(bool value) async {
     if (value) {
       final ok = await _checkUsbDebugging();
-      if (!ok) return;
+
+      if (!ok) {
+        await _networkProxy.stopProxy();
+        await _settingsService.setNetworkEnabled(false);
+
+        if (!mounted) return;
+
+        setState(() {
+          networkSharingEnabled = false;
+        });
+
+        return;
+      }
 
       await _networkProxy.startProxy();
     } else {

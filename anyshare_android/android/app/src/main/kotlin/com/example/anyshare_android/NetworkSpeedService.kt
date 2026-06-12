@@ -139,12 +139,12 @@ class NetworkSpeedService : Service() {
         val centerX = width / 2f
 
         paint.textSize = numberTextSize
-        paint.textScaleX = 0.85f
+        paint.textScaleX = 0.75f
         paint.letterSpacing = -0.10f
-        canvas.drawText(valueText, centerX, 68f, paint)
+        canvas.drawText(valueText, centerX, 95f, paint)
 
-        paint.textSize = numberTextSize * 0.70f
-        paint.letterSpacing = -0.06f
+        paint.textSize = numberTextSize * 0.60f
+        paint.letterSpacing = 0f
         canvas.drawText(unitText, centerX, 156f, paint)
 
         return IconCompat.createWithBitmap(bitmap)

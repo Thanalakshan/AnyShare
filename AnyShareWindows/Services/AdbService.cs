@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace AnyShareWindows.Services;
@@ -21,7 +22,10 @@ public class AdbService
     public async Task<bool> SetupClipboardBridge()
     {
         await RunAdb("forward tcp:18765 tcp:8765");
-        return true;
+        var output = await RunAdb("forward --list");
+
+        return output.Contains("tcp:18765", StringComparison.Ordinal) &&
+               output.Contains("tcp:8765", StringComparison.Ordinal);
     }
 
     public async Task<bool> RemoveClipboardBridge()
@@ -41,17 +45,25 @@ public class AdbService
                 line.Contains("tcp:8888", StringComparison.Ordinal));
     }
 
-    public async Task<bool> IsAndroidNetworkProxyRunning()
+    public async Task<bool?> GetAndroidNetworkSharingEnabled()
     {
-        var output = await RunAdb("shell dumpsys activity services");
+        var output = await RunAdb(
+            "shell content query --uri content://com.example.anyshare_android.networkstate/state"
+        );
 
-        return output.Contains("NetworkProxyService", StringComparison.OrdinalIgnoreCase);
+        if (output.Contains("state=ON", StringComparison.OrdinalIgnoreCase))
+            return true;
+
+        if (output.Contains("state=OFF", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return null;
     }
 
     public async Task<bool> SetupNetworkBridge()
     {
         await RunAdb("forward tcp:18889 tcp:8888");
-        return true;
+        return await IsNetworkBridgeForwarded();
     }
 
     public async Task<bool> RemoveNetworkBridge()
@@ -108,10 +120,25 @@ public class AdbService
             if (process == null)
                 return "";
 
-            var output = await process.StandardOutput.ReadToEndAsync();
-            var error = await process.StandardError.ReadToEndAsync();
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
-            await process.WaitForExitAsync();
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(true); } catch { }
+                return "";
+            }
+
+            var output = await outputTask;
+            var error = await errorTask;
+
+            if (process.ExitCode != 0)
+                return "";
 
             return string.IsNullOrWhiteSpace(output) ? error : output;
         }

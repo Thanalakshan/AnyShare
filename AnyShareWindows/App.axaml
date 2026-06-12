@@ -75,5 +75,22 @@
             <Setter Property="Background" Value="#3A86FF"/>
             <Setter Property="Foreground" Value="White"/>
         </Style>
+
+        <Style Selector="Button.quitAction">
+            <Setter Property="Background" Value="#2A1114"/>
+            <Setter Property="Foreground" Value="#FF6B6B"/>
+            <Setter Property="BorderBrush" Value="#7F1D1D"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        </Style>
+
+        <Style Selector="Button.quitAction:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#7F1D1D"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
     </Application.Styles>
 </Application>

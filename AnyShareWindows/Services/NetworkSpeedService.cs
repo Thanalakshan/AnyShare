@@ -9,12 +9,15 @@ namespace AnyShareWindows.Services;
 
 public class NetworkSpeedService
 {
+    private const int SmoothingWindowSize = 3;
+
     private long _lastReceived;
     private long _lastSent;
     private DateTime _lastTime = DateTime.Now;
 
     private bool _baselineSet;
     private bool _externalMode = false;
+    private readonly Queue<(long Download, long Upload)> _speedSamples = new();
 
     public long TodayBytes { get; private set; }
     public long TodayDownloadBytes { get; private set; }
@@ -83,8 +86,10 @@ public class NetworkSpeedService
         TodayUploadBytes += diffSent;
         TodayBytes = TodayDownloadBytes + TodayUploadBytes;
 
-        CurrentDownloadSpeed = (long)(diffReceived / seconds);
-        CurrentUploadSpeed = (long)(diffSent / seconds);
+        ApplySmoothedSpeed(
+            (long)(diffReceived / seconds),
+            (long)(diffSent / seconds)
+        );
 
         _lastReceived = received;
         _lastSent = sent;
@@ -100,22 +105,28 @@ public class NetworkSpeedService
         long uploadBytesPerSecond,
         string source)
     {
+        if (!_externalMode)
+            _speedSamples.Clear();
+
         _externalMode = true;
-        CurrentDownloadSpeed = downloadBytesPerSecond;
-        CurrentUploadSpeed = uploadBytesPerSecond;
+        ApplySmoothedSpeed(downloadBytesPerSecond, uploadBytesPerSecond);
         NetworkSource = source;
     }
 
     public void ClearExternalSpeed()
     {
         if (!_externalMode)
+        {
+            NetworkSource = DetectNetworkSource();
             return;
+        }
 
         _externalMode = false;
         _baselineSet = false;
+        _speedSamples.Clear();
         CurrentDownloadSpeed = 0;
         CurrentUploadSpeed = 0;
-        NetworkSource = "Not connected";
+        NetworkSource = DetectNetworkSource();
     }
 
     private static string DetectNetworkSource()
@@ -230,23 +241,54 @@ public class NetworkSpeedService
         const double MB = KB * 1024.0;
         const double GB = MB * 1024.0;
 
-        if (bytesPerSecond >= GB)
-        {
-            return $"{bytesPerSecond / GB:0.0} GB/s";
-        }
-
-        if (bytesPerSecond >= MB)
-        {
-            var mb = bytesPerSecond / MB;
-
-            if (mb >= 10)
-                return $"{Math.Round(mb):0} MB/s";
-
-            return $"{mb:0.0} MB/s";
-        }
-
         var kb = bytesPerSecond / KB;
+        var mb = bytesPerSecond / MB;
+        var gb = bytesPerSecond / GB;
+
+        if (gb >= 1.0 || mb >= 1000.0)
+        {
+            if (gb >= 10.0)
+            {
+                return $"{Math.Round(gb):0} GB/s";
+            }
+            else if (Math.Abs(gb - Math.Round(gb)) < 0.05)
+            {
+                return $"{Math.Round(gb):0} GB/s";
+            }
+            else
+            {
+                return $"{gb:0.0} GB/s";
+            }
+        }
+
+        if (mb >= 1.0 || kb >= 1000.0)
+        {
+            if (mb >= 10.0)
+            {
+                return $"{Math.Round(mb):0} MB/s";
+            }
+            else if (Math.Abs(mb - Math.Round(mb)) < 0.05)
+            {
+                return $"{Math.Round(mb):0} MB/s";
+            }
+            else
+            {
+                return $"{mb:0.0} MB/s";
+            }
+        }
+
         return $"{Math.Round(kb):0} KB/s";
+    }
+
+    private void ApplySmoothedSpeed(long download, long upload)
+    {
+        _speedSamples.Enqueue((download, upload));
+
+        while (_speedSamples.Count > SmoothingWindowSize)
+            _speedSamples.Dequeue();
+
+        CurrentDownloadSpeed = (long)_speedSamples.Average(sample => sample.Download);
+        CurrentUploadSpeed = (long)_speedSamples.Average(sample => sample.Upload);
     }
 
     public static string FormatBytes(long bytes)

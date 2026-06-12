@@ -7,7 +7,6 @@
         Icon="/Assets/icon/icon.ico"
         Background="#0A0A0C"
         ShowInTaskbar="False"
-        WindowState="Minimized"
         CanResize="False">
 
     <ScrollViewer>
@@ -205,6 +204,10 @@
                                   IsHitTestVisible="False"/>
                 </Grid>
             </Button>
+
+            <Button x:Name="QuitButton"
+                    Classes="quitAction"
+                    Content="Quit AnyShare"/>
 
         </StackPanel>
     </ScrollViewer>

@@ -35,6 +35,12 @@
             android:name=".NetworkProxyService"
             android:exported="false" />
 
+        <provider
+            android:name=".NetworkSharingStateProvider"
+            android:authorities="com.example.anyshare_android.networkstate"
+            android:exported="true"
+            android:grantUriPermissions="false" />
+
         <service
             android:name=".ClipboardBridgeService"
             android:exported="false" />

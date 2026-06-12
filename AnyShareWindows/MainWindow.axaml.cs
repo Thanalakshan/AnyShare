@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -15,6 +16,7 @@ public partial class MainWindow : Window
     private readonly ClipboardShareService _clipboardShare = new();
     private readonly NetworkSharingService _networkSharing = new();
     private readonly DispatcherTimer _networkSharingTimer = new();
+    private readonly SemaphoreSlim _networkSharingLock = new(1, 1);
 
     private bool _historyExpanded = false;
     private bool _isUpdatingToggle = false;
@@ -24,6 +26,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
 
+        _networkSharing.DisableWindowsProxy();
+        App.NetworkSpeed.ClearExternalSpeed();
         LoadSettings();
 
         App.NetworkSpeed.Updated += OnNetworkSpeedUpdated;
@@ -31,15 +35,7 @@ public partial class MainWindow : Window
         _networkSharingTimer.Interval = TimeSpan.FromSeconds(2);
         _networkSharingTimer.Tick += async (_, _) =>
         {
-            if (SharingToggle.IsChecked == true)
-            {
-                await AutoConnectNetworkSharing();
-                await UpdateAnyShareTunnelState();
-            }
-            else
-            {
-                _anyShareTunnelActive = false;
-            }
+            await MonitorNetworkSharingState();
         };
         _networkSharingTimer.Start();
 
@@ -111,14 +107,26 @@ public partial class MainWindow : Window
 
         SendClipboardButton.Click += async (_, _) =>
         {
-            await _clipboardShare.SetupAdbBridge();
-            await _clipboardShare.SendWindowsClipboardToAndroid();
+            try
+            {
+                if (await _clipboardShare.SetupAdbBridge())
+                    await _clipboardShare.SendWindowsClipboardToAndroid();
+            }
+            catch
+            {
+            }
         };
 
         ReceiveClipboardButton.Click += async (_, _) =>
         {
-            await _clipboardShare.SetupAdbBridge();
-            await _clipboardShare.ReceiveAndroidClipboardToWindows();
+            try
+            {
+                if (await _clipboardShare.SetupAdbBridge())
+                    await _clipboardShare.ReceiveAndroidClipboardToWindows();
+            }
+            catch
+            {
+            }
         };
 
         StartupCard.Click += (_, _) =>
@@ -132,6 +140,12 @@ public partial class MainWindow : Window
 
             _startup.SetStartup(StartupToggle.IsChecked == true);
             SaveSettings();
+        };
+
+        QuitButton.Click += (_, _) =>
+        {
+            SaveSettings();
+            (Avalonia.Application.Current as App)?.ShutdownApplication();
         };
 
         Closing += (_, _) => SaveSettings();
@@ -168,12 +182,13 @@ public partial class MainWindow : Window
 
         var deviceConnected = await _adb.IsDeviceConnected();
         var bridgeForwarded = deviceConnected && await _adb.IsNetworkBridgeForwarded();
-        var androidProxyRunning = deviceConnected && await _adb.IsAndroidNetworkProxyRunning();
+        var androidSharingEnabled = deviceConnected &&
+            await _adb.GetAndroidNetworkSharingEnabled() == true;
 
         _anyShareTunnelActive =
             deviceConnected &&
             bridgeForwarded &&
-            androidProxyRunning &&
+            androidSharingEnabled &&
             _networkSharing.IsProxyRunning;
 
         if (wasActive && !_anyShareTunnelActive)
@@ -333,42 +348,84 @@ public partial class MainWindow : Window
         }
     }
 
-    private async Task OnNetworkSharingChanged()
+    private async Task MonitorNetworkSharingState()
     {
-        if (SharingToggle.IsChecked == true)
+        if (!await _networkSharingLock.WaitAsync(0))
+            return;
+
+        try
         {
-            await AutoConnectNetworkSharing();
-            await UpdateAnyShareTunnelState();
+            if (SharingToggle.IsChecked != true)
+            {
+                await ForceDisableAnyShareProxy();
+                return;
+            }
+
+            if (!await _adb.IsDeviceConnected())
+            {
+                await ForceDisableAnyShareProxy();
+                return;
+            }
+
+            if (await _adb.GetAndroidNetworkSharingEnabled() != true)
+            {
+                await ForceDisableAnyShareProxy();
+                return;
+            }
+
+            if (!await _adb.SetupNetworkBridge() ||
+                !await NetworkSharingService.TestTunnelConnection())
+            {
+                await ForceDisableAnyShareProxy();
+                return;
+            }
+
+            // State can change while ADB and tunnel checks are in flight.
+            if (SharingToggle.IsChecked != true ||
+                !await _adb.IsDeviceConnected() ||
+                await _adb.GetAndroidNetworkSharingEnabled() != true)
+            {
+                await ForceDisableAnyShareProxy();
+                return;
+            }
+
+            _networkSharing.EnableWindowsProxy();
+            _anyShareTunnelActive = true;
         }
-        else
+        finally
         {
-            _anyShareTunnelActive = false;
-            App.NetworkSpeed.ClearExternalSpeed();
-            await _adb.RemoveNetworkBridge();
-            _networkSharing.DisableWindowsProxy();
+            _networkSharingLock.Release();
         }
     }
 
-    private async Task AutoConnectNetworkSharing()
+    private async Task ForceDisableAnyShareProxy()
     {
-        var connected = await _adb.IsDeviceConnected();
+        var wasAnyShareActive =
+            _anyShareTunnelActive ||
+            _networkSharing.IsProxyRunning;
 
-        if (!connected)
-        {
-            _networkSharing.DisableWindowsProxy();
+        _anyShareTunnelActive = false;
+
+        if (wasAnyShareActive)
+            App.NetworkSpeed.ClearExternalSpeed();
+
+        await _adb.RemoveNetworkBridge();
+
+        _networkSharing.DisableWindowsProxy();
+
+        if (!wasAnyShareActive)
             return;
-        }
 
-        var bridgeOk = await _adb.SetupNetworkBridge();
+        NetworkSourceText.Text = App.NetworkSpeed.NetworkSource;
+        DownloadSpeedText.Text = "0 KB/s";
+        UploadSpeedText.Text = "0 KB/s";
+        App.SpeedWidget?.UpdateSpeed("0 KB/s", "0 KB/s");
+    }
 
-        if (bridgeOk)
-        {
-            _networkSharing.EnableWindowsProxy();
-        }
-        else
-        {
-            _networkSharing.DisableWindowsProxy();
-        }
+    private async Task OnNetworkSharingChanged()
+    {
+        SaveSettings();
+        await MonitorNetworkSharingState();
     }
 
     private async Task OnClipboardChanged()

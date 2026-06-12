@@ -12,6 +12,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+
     private val speedChannel = "anyshare/network_speed"
     private val deviceChannel = "anyshare/device"
     private val clipboardChannel = "anyshare/clipboard"
@@ -19,138 +20,233 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, speedChannel)
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "startSpeedNotification" -> {
-                        val intent = Intent(this, NetworkSpeedService::class.java)
+        // -----------------------------
+        // Network Speed Service
+        // -----------------------------
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            speedChannel
+        ).setMethodCallHandler { call, result ->
 
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            startForegroundService(intent)
-                        } else {
-                            startService(intent)
-                        }
+            when (call.method) {
 
-                        result.success(true)
+                "startSpeedNotification" -> {
+                    val intent =
+                        Intent(this, NetworkSpeedService::class.java)
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        startForegroundService(intent)
+                    } else {
+                        startService(intent)
                     }
 
-                    "stopSpeedNotification" -> {
-                        stopService(Intent(this, NetworkSpeedService::class.java))
-                        result.success(true)
-                    }
-
-                    "isSpeedServiceRunning" -> {
-                        result.success(NetworkSpeedService.isRunning)
-                    }
-
-                    else -> result.notImplemented()
+                    result.success(true)
                 }
+
+                "stopSpeedNotification" -> {
+                    stopService(
+                        Intent(this, NetworkSpeedService::class.java)
+                    )
+
+                    result.success(true)
+                }
+
+                "isSpeedServiceRunning" -> {
+                    result.success(NetworkSpeedService.isRunning)
+                }
+
+                else -> result.notImplemented()
             }
+        }
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, clipboardChannel)
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "startClipboardBridge" -> {
-                        startService(Intent(this, ClipboardBridgeService::class.java))
-                        result.success(true)
-                    }
+        // -----------------------------
+        // Clipboard Bridge
+        // -----------------------------
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            clipboardChannel
+        ).setMethodCallHandler { call, result ->
 
-                    "stopClipboardBridge" -> {
-                        stopService(Intent(this, ClipboardBridgeService::class.java))
-                        result.success(true)
-                    }
+            when (call.method) {
 
-                    "sendAndroidClipboard" -> {
-                        val clipboard =
-                            getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                "startClipboardBridge" -> {
+                    startService(
+                        Intent(this, ClipboardBridgeService::class.java)
+                    )
 
-                        val clip = clipboard.primaryClip
+                    result.success(true)
+                }
 
-                        val text = if (clip != null && clip.itemCount > 0) {
-                            clip.getItemAt(0).coerceToText(this)?.toString() ?: ""
+                "stopClipboardBridge" -> {
+                    stopService(
+                        Intent(this, ClipboardBridgeService::class.java)
+                    )
+
+                    result.success(true)
+                }
+
+                "isClipboardBridgeRunning" -> {
+                    result.success(
+                        ClipboardBridgeService.isRunning
+                    )
+                }
+
+                "sendAndroidClipboard" -> {
+
+                    startService(
+                        Intent(this, ClipboardBridgeService::class.java)
+                    )
+
+                    val clipboard =
+                        getSystemService(
+                            Context.CLIPBOARD_SERVICE
+                        ) as ClipboardManager
+
+                    val clip = clipboard.primaryClip
+
+                    val text =
+                        if (clip != null && clip.itemCount > 0) {
+                            clip.getItemAt(0)
+                                .coerceToText(this)
+                                ?.toString()
+                                ?: ""
                         } else {
                             ""
                         }
 
-                        ClipboardBridgeService.lastAndroidSent = text
-                        result.success(true)
-                    }
+                    ClipboardStateStore.setAndroidClipboard(this, text)
 
-                    "receiveWindowsClipboard" -> {
-                        val text = ClipboardBridgeService.lastWindowsSent
-
-                        if (text.isNotEmpty()) {
-                            val clipboard =
-                                getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-
-                            clipboard.setPrimaryClip(
-                                ClipData.newPlainText("AnyShare", text)
-                            )
-                        }
-
-                        result.success(true)
-                    }
-
-                    else -> result.notImplemented()
+                    result.success(text.isNotEmpty())
                 }
-            }
 
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, deviceChannel)
-            .setMethodCallHandler { call, result ->
-                when (call.method) {
-                    "isUsbDebuggingEnabled" -> {
-                        val enabled = Settings.Global.getInt(
+                "receiveWindowsClipboard" -> {
+
+                    val text = ClipboardStateStore.getWindowsClipboard(this)
+
+                    if (text.isNotEmpty()) {
+
+                        val clipboard =
+                            getSystemService(
+                                Context.CLIPBOARD_SERVICE
+                            ) as ClipboardManager
+
+                        clipboard.setPrimaryClip(
+                            ClipData.newPlainText(
+                                "AnyShare",
+                                text
+                            )
+                        )
+                    }
+
+                    result.success(text.isNotEmpty())
+                }
+
+                else -> result.notImplemented()
+            }
+        }
+
+        // -----------------------------
+        // Device + Network Proxy
+        // -----------------------------
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            deviceChannel
+        ).setMethodCallHandler { call, result ->
+
+            when (call.method) {
+
+                "isUsbDebuggingEnabled" -> {
+
+                    val enabled =
+                        Settings.Global.getInt(
                             contentResolver,
                             Settings.Global.ADB_ENABLED,
                             0
                         ) == 1
 
-                        result.success(enabled)
-                    }
+                    result.success(enabled)
+                }
 
-                    "startNetworkProxy" -> {
-                        startService(Intent(this, NetworkProxyService::class.java))
-                        result.success(true)
-                    }
+                "startNetworkProxy" -> {
 
-                    "stopNetworkProxy" -> {
-                        stopService(Intent(this, NetworkProxyService::class.java))
-                        result.success(true)
-                    }
+                    NetworkSharingStateStore.setEnabled(this, true)
 
-                    "isNetworkProxyRunning" -> {
-                        result.success(NetworkProxyService.isRunning)
-                    }
+                    startService(
+                        Intent(this, NetworkProxyService::class.java)
+                    )
 
-                    "isOverlayPermissionGranted" -> {
-                        result.success(Settings.canDrawOverlays(this))
-                    }
+                    result.success(true)
+                }
 
-                    "openOverlayPermissionSettings" -> {
-                        val intent = Intent(
-                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:$packageName")
-                        )
-                        startActivity(intent)
-                        result.success(true)
-                    }
+                "stopNetworkProxy" -> {
 
-                    "isAccessibilityEnabled" -> {
-                        val enabledServices = Settings.Secure.getString(
+                    NetworkSharingStateStore.setEnabled(this, false)
+
+                    NetworkProxyService.stopActiveProxy()
+
+                    stopService(
+                        Intent(this, NetworkProxyService::class.java)
+                    )
+
+                    result.success(true)
+                }
+
+                "isNetworkProxyRunning" -> {
+                    result.success(
+                        NetworkProxyService.isRunning
+                    )
+                }
+
+                "isNetworkSharingEnabled" -> {
+                    result.success(
+                        NetworkSharingStateStore.isEnabled(this)
+                    )
+                }
+
+                "isOverlayPermissionGranted" -> {
+                    result.success(
+                        Settings.canDrawOverlays(this)
+                    )
+                }
+
+                "openOverlayPermissionSettings" -> {
+
+                    val intent = Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:$packageName")
+                    )
+
+                    startActivity(intent)
+
+                    result.success(true)
+                }
+
+                "isAccessibilityEnabled" -> {
+
+                    val enabledServices =
+                        Settings.Secure.getString(
                             contentResolver,
                             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
                         ) ?: ""
 
-                        result.success(enabledServices.contains(packageName))
-                    }
-
-                    "openAccessibilitySettings" -> {
-                        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                        result.success(true)
-                    }
-
-                    else -> result.notImplemented()
+                    result.success(
+                        enabledServices.contains(packageName)
+                    )
                 }
+
+                "openAccessibilitySettings" -> {
+
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_ACCESSIBILITY_SETTINGS
+                        )
+                    )
+
+                    result.success(true)
+                }
+
+                else -> result.notImplemented()
             }
+        }
     }
 }

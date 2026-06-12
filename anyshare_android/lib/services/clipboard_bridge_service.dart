@@ -18,4 +18,9 @@ class ClipboardBridgeService {
   Future<void> receiveWindowsClipboard() async {
     await _channel.invokeMethod('receiveWindowsClipboard');
   }
+
+  Future<bool> isBridgeRunning() async {
+    final result = await _channel.invokeMethod<bool>('isClipboardBridgeRunning');
+    return result ?? false;
+  }
 }
