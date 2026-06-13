@@ -289,12 +289,6 @@ public partial class MainWindow : Window
                 FontSize = 11
             };
 
-            var usageStack = new StackPanel
-            {
-                Spacing = 2,
-                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
-            };
-
             var usageText = new TextBlock
             {
                 Text = NetworkSpeedService.FormatBytes(record.BytesUsed),
@@ -302,24 +296,13 @@ public partial class MainWindow : Window
                     Avalonia.Media.Color.Parse("White")
                 ),
                 FontWeight = Avalonia.Media.FontWeight.Bold,
-                FontSize = 11
+                FontSize = 11,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
             };
-
-            var sourceText = new TextBlock
-            {
-                Text = $"({record.NetworkSource})",
-                Foreground = new Avalonia.Media.SolidColorBrush(
-                    Avalonia.Media.Color.Parse("#3A86FF")
-                ),
-                FontSize = 10
-            };
-
-            usageStack.Children.Add(usageText);
-            usageStack.Children.Add(sourceText);
 
             grid.Children.Add(dateText);
-            Grid.SetColumn(usageStack, 1);
-            grid.Children.Add(usageStack);
+            Grid.SetColumn(usageText, 1);
+            grid.Children.Add(usageText);
 
             HistoryItemsPanel.Children.Add(grid);
         }
@@ -436,13 +419,7 @@ public partial class MainWindow : Window
         if (ClipboardToggle.IsChecked == true)
         {
             if (!await _adb.IsDeviceConnected())
-            {
-                _isUpdatingToggle = true;
-                ClipboardToggle.IsChecked = false;
-                ClipboardActionsPanel.IsVisible = false;
-                _isUpdatingToggle = false;
                 return;
-            }
 
             await _adb.SetupClipboardBridge();
             await _clipboardShare.SetupAdbBridge();

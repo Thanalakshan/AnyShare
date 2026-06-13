@@ -68,15 +68,24 @@
                 <Border Classes="card">
                     <StackPanel Spacing="10">
 
-                        <Grid ColumnDefinitions="*,Auto">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12">
                             <TextBlock Text="Today Usage"
                                        Foreground="White"
                                        FontSize="14"
                                        FontWeight="Bold"
                                        VerticalAlignment="Center"/>
 
+                            <TextBlock x:Name="NetworkSourceText"
+                                       Grid.Column="1"
+                                       Text="Unknown"
+                                       Foreground="#3A86FF"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+
                             <Button x:Name="ResetButton"
-                                    Grid.Column="1"
+                                    Grid.Column="2"
                                     Classes="resetBtn"
                                     Content="Reset"/>
                         </Grid>
@@ -122,11 +131,6 @@
                                        HorizontalAlignment="Center"/>
                         </Grid>
 
-                        <TextBlock x:Name="NetworkSourceText"
-                                   Text="Unknown"
-                                   Foreground="#6B7280"
-                                   FontSize="12"
-                                   HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
@@ -184,11 +188,15 @@
                         
 
                 <Button x:Name="SendClipboardButton"
-                        Classes="primaryAction"
+                        Classes="resetBtn"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
                         Content="Send Clipboard to Android"/>
 
                 <Button x:Name="ReceiveClipboardButton"
-                        Classes="primaryAction"
+                        Classes="resetBtn"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
                         Content="Receive Clipboard from Android"/>
                             </StackPanel>
 
